@@ -80,6 +80,10 @@ coverage/
 *.xlsx
 Enterprise SaaS Interface Design/
 
+AI_MATCHING_IMPLEMENTATION_PLAN.md
+documentation.txt
+README-TESTING.md
+
 # ===== Alembic =====
 alembic/versions/__pycache__/
 
