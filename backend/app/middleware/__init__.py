@@ -1,0 +1,1 @@
+"""Security and utility middleware for the application."""
