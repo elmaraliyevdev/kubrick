@@ -1,0 +1,87 @@
+# ===== Environment & Secrets =====
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+!.env.example
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+*.whl
+
+# ===== Node.js =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+
+# ===== Build Output =====
+frontend/dist/
+frontend/build/
+backend/dist/
+*.js.map
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+.project
+.settings/
+.classpath
+
+# ===== OS Generated =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===== Logs =====
+*.log
+logs/
+backend/logs/
+
+# ===== Uploads & User Data =====
+backend/uploads/
+uploads/
+
+# ===== Testing =====
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+coverage/
+*.lcov
+
+# ===== Personal / Misc =====
+*.docx
+*.doc
+*.pptx
+*.xlsx
+Enterprise SaaS Interface Design/
+
+# ===== Alembic =====
+alembic/versions/__pycache__/
+
+# ===== Sentry =====
+.sentryclirc

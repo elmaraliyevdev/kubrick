@@ -1,0 +1,208 @@
+Product Documentation – Kubrick HR (AI-Powered Resume Scanner & Ranker)
+
+
+This document provides a comprehensive overview of Kubrick HR, including vision, features, user flows, competitors, and monetization. It is formatted so you can copy directly into Confluence.
+
+🚀 Product Overview
+
+Kubrick HR is an AI-powered resume scanner and candidate ranking platform designed for recruiters, HR teams, and hiring managers. It automates the parsing, analysis, and ranking of resumes against job descriptions, enabling faster, smarter, and bias-reduced hiring decisions.
+
+Vision:
+
+To empower recruiters and companies with an AI-driven tool that turns resumes into actionable insights, saving time and improving quality of hire.
+
+🎯 Target Users
+
+Recruiters & HR professionals at small-to-mid-sized companies
+
+Hiring managers looking for quick shortlists
+
+Recruitment agencies managing multiple clients
+
+🏢 Competitor Landscape
+
+Jobscan – Resume-to-JD match tool (job seeker focus)
+
+Skima AI – Enterprise-grade parsing & ranking with ATS integrations
+
+RChilli / DaXtra / Textkernel – Resume parsing software
+
+Rezi, Kickresume, Teal – Candidate-side resume optimization tools
+
+Kubrick HR Differentiators:
+
+Affordable & lean compared to enterprise ATS
+
+Focus on recruiter-side ranking (not job seeker side)
+
+Local language support (English, Azerbaijani, Russian, Turkish)
+
+Transparent scoring with clear explanations
+
+⚙️ Core Features
+
+1. Resume Parsing
+
+Upload: PDF, DOCX, TXT (OCR support later)
+
+Extract: Contact info, skills, experience, education, certifications
+
+Structured profile in standardized format
+
+2. Job Description Parsing
+
+Paste JD or upload doc
+
+Extract key requirements (skills, experience, keywords)
+
+3. AI-Powered Matching & Ranking
+
+Match % score between candidate & JD
+
+Highlight matched, missing, and weak skills
+
+Transparent reasoning for score
+
+4. Recruiter Dashboard
+
+Job management (create, edit, archive)
+
+Candidate list ranked by match %
+
+Color-coded scoring badges (Green, Yellow, Red)
+
+Search and filter candidates
+
+5. Candidate Detail View
+
+Parsed profile summary
+
+AI insights (skills matched/missing, gap analysis)
+
+AI-generated candidate pitch
+
+Export options (PDF/CSV)
+
+6. Reporting & Exports
+
+Job summary reports with top matches
+
+Export lists (CSV, PDF, Shareable link)
+
+7. Multi-language Support
+
+MVP: English
+
+Phase 2+: Azerbaijani, Russian, Turkish
+
+8. Integrations (Phase 2+)
+
+ATS integration (Greenhouse, Lever, Zoho)
+
+Slack/email notifications
+
+Candidate sourcing (LinkedIn, GitHub)
+
+🔄 Recruiter User Flows
+
+1. Login / Onboarding
+
+Recruiter logs in or creates account
+
+Empty state shows CTA: “Create your first job”
+
+2. Dashboard
+
+View job list with candidate counts
+
+CTA: [+ Create New Job]
+
+3. Job Creation
+
+Enter job title + JD
+
+Save job → redirect to Job Detail
+
+4. Candidate Upload & Ranking
+
+Upload resumes (bulk drag & drop)
+
+Progress bar for parsing
+
+Ranked candidate list by match %
+
+5. Candidate Detail
+
+Parsed resume with insights
+
+AI pitch + matched/missing skills
+
+Export or shortlist candidate
+
+6. Reports & Export
+
+Job summary with top matches
+
+Export CSV/PDF/share link
+
+💰 Monetization
+
+Pricing Model:
+
+Freemium: 5 free scans/month
+
+Basic ($29/mo): Up to 100 resumes
+
+Pro ($99/mo): Up to 500 resumes + AI summaries
+
+Agency ($199+/mo): Unlimited scans, multi-user, ATS integration
+
+Pay-as-you-go credits for extra scans
+
+🎨 Branding
+
+Product Name: Kubrick HR
+
+Domain: kubrickhr.app
+
+Positioning: “Your AI-powered desk for smarter hiring.”
+
+Taglines:
+
+“Scan, rank, and hire the best talent — faster.”
+
+“Turn resumes into insights, instantly.”
+
+📅 Roadmap
+
+MVP (Phase 1):
+
+Resume + JD parsing
+
+AI scoring & ranking
+
+Dashboard + Candidate cards
+
+Export (PDF/CSV)
+
+Phase 2:
+
+Multi-language parsing
+
+ATS integrations
+
+Team collaboration features
+
+AI-generated interview questions
+
+Phase 3:
+
+Candidate sourcing (LinkedIn/GitHub APIs)
+
+Diversity & bias checker
+
+White-labeling for agencies
+
+✅ Summary
+
+Kubrick HR is a lean AI recruiting tool that gives recruiters instant insights into candidate-job fit. Unlike bloated ATS systems, Kubrick HR focuses on resume parsing, matching, and ranking — fast, affordable, and built for real recruiter workflows.
