@@ -252,18 +252,30 @@ class MatchScoreCalculator:
             if not match_found:
                 missing_required.append(req_skill)
 
+        # Track which candidate skills have already been used for matching
+        used_candidate_skills = {m["candidate_skill"].lower() for m in matched_skills}
+
         # Check nice-to-have skills
         for nice_skill in nice_to_have_skills:
             nice_skill_norm = nice_skill.lower().strip()
             match_found = False
 
-            # Skip if already matched as required
-            already_matched = any(m["job_skill"].lower() == nice_skill_norm for m in matched_skills)
+            # Skip if this job skill (or a synonym of it) was already matched as required
+            nice_expanded = set(self.normalize_skills([nice_skill_norm]))
+            already_matched = any(
+                nice_skill_norm == m["job_skill"].lower()
+                or nice_expanded.intersection(set(self.normalize_skills([m["job_skill"].lower()])))
+                for m in matched_skills
+            )
             if already_matched:
                 continue
 
             for candidate_skill in candidate_skills:
                 candidate_skill_norm = candidate_skill.lower().strip()
+
+                # Skip candidate skills already used in required matching
+                if candidate_skill_norm in used_candidate_skills:
+                    continue
 
                 # Direct match or synonym match
                 if (nice_skill_norm in self.normalize_skills([candidate_skill_norm]) or
@@ -275,6 +287,7 @@ class MatchScoreCalculator:
                         "similarity": 1.0,
                         "required": False
                     })
+                    used_candidate_skills.add(candidate_skill_norm)
                     match_found = True
                     break
 
@@ -287,6 +300,7 @@ class MatchScoreCalculator:
                         "similarity": 0.9,
                         "required": False
                     })
+                    used_candidate_skills.add(candidate_skill_norm)
                     match_found = True
                     break
 
@@ -300,6 +314,7 @@ class MatchScoreCalculator:
                         "similarity": similarity,
                         "required": False
                     })
+                    used_candidate_skills.add(candidate_skill_norm)
                     match_found = True
                     break
 
@@ -400,10 +415,12 @@ class MatchScoreCalculator:
             experience_score = 10.0
         
         # Relevant experience bonus (10 points max)
-        # This would be calculated based on work experience relevance
-        # For now, give partial credit based on having work experience entries
+        # Based on having work experience entries — no free points for missing data
         work_experiences = candidate.get("work_experiences", [])
-        relevant_score = min(10.0, len(work_experiences) * 2.5) if work_experiences else 5.0
+        if work_experiences:
+            relevant_score = min(10.0, len(work_experiences) * 2.5)
+        else:
+            relevant_score = 0.0
         
         total_score = min(max_score, experience_score + relevant_score)
         
@@ -434,8 +451,8 @@ class MatchScoreCalculator:
             return max_score * 0.6, analysis
         
         if not candidate_education:
-            # No education data for candidate
-            return max_score * 0.3, analysis
+            # No education data — can't evaluate, no free points
+            return 0.0, analysis
         
         # Find the highest education level for candidate
         candidate_highest = 0
@@ -503,56 +520,99 @@ class MatchScoreCalculator:
         return total_score, analysis
 
     def calculate_additional_score(self, job_requirements: Dict[str, Any], candidate: Dict[str, Any], job_data: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
-        """Calculate additional factors score (0-20 points)"""
+        """Calculate additional factors score (0-20 points).
+
+        Only scores factors where we have real data to evaluate.
+        Redistributes weight from unevaluatable factors to evaluatable ones
+        so the total component still uses its full weight fairly.
+        """
         max_score = self.config["weights"]["additional"]
-        
-        analysis = {
-            "location_score": 0.0,
-            "salary_score": 0.0,
-            "work_arrangement_score": 0.0
-        }
-        
-        # Location matching (8 points max)
+
         location_reqs = job_requirements.get("location_requirements", [])
-        candidate_location = candidate.get("location", "")
-        job_location = job_data.get("location", "")
+        candidate_location = (candidate.get("location") or "").strip()
+        job_location = (job_data.get("location") or "").strip()
         work_arrangement = job_data.get("work_arrangement", "onsite")
-        
-        location_score = 0.0
-        
-        if not location_reqs and not job_location:
-            location_score = 8.0  # No requirements
-        elif any("remote" in str(req).lower() for req in location_reqs) or work_arrangement == "remote_only":
-            location_score = 8.0  # Remote work - location doesn't matter
-        elif candidate_location and job_location:
-            # Compare locations (simple string matching for now)
-            if candidate_location.lower() in job_location.lower() or job_location.lower() in candidate_location.lower():
-                location_score = 8.0
-            else:
-                location_score = 4.0  # Different location but could relocate
-        else:
-            location_score = 6.0  # Missing location data
-        
-        # Salary alignment (7 points max)
-        salary_min = job_data.get("salary_min")
-        salary_max = job_data.get("salary_max")
-        # Note: We don't have candidate salary expectations in current schema
-        # For now, give neutral score
-        salary_score = 5.0
-        
-        # Work arrangement (5 points max)
-        arrangement_score = 5.0  # Default full score
-        
-        total_score = min(max_score, location_score + salary_score + arrangement_score)
-        
-        analysis.update({
-            "location_score": location_score,
-            "salary_score": salary_score,
-            "work_arrangement_score": arrangement_score,
-            "total_score": total_score
-        })
-        
+
+        # --- Location score (0.0 to 1.0 ratio) ---
+        location_ratio = self._evaluate_location(
+            location_reqs, candidate_location, job_location, work_arrangement
+        )
+
+        # We can always evaluate location (even "no data" is a signal), so
+        # location is the primary driver of additional score.
+        # Salary and work arrangement are only scored when data exists.
+
+        # --- Salary score (0.0 to 1.0 ratio or None if unevaluatable) ---
+        salary_ratio = None  # We don't have candidate salary expectations yet
+
+        # --- Work arrangement score (0.0 to 1.0 ratio or None) ---
+        arrangement_ratio = None  # We don't have candidate preferences yet
+
+        # Build the score from evaluatable factors only.
+        # Location always gets the majority of the weight.
+        evaluatable = [("location", location_ratio)]
+        if salary_ratio is not None:
+            evaluatable.append(("salary", salary_ratio))
+        if arrangement_ratio is not None:
+            evaluatable.append(("arrangement", arrangement_ratio))
+
+        # Distribute max_score across evaluatable factors
+        per_factor = max_score / len(evaluatable) if evaluatable else 0
+        total_score = sum(ratio * per_factor for _, ratio in evaluatable)
+        total_score = min(max_score, total_score)
+
+        # Build analysis with actual point values
+        location_points = location_ratio * per_factor
+        salary_points = (salary_ratio * per_factor) if salary_ratio is not None else None
+        arrangement_points = (arrangement_ratio * per_factor) if arrangement_ratio is not None else None
+
+        analysis = {
+            "location_score": round(location_points, 2),
+            "salary_score": round(salary_points, 2) if salary_points is not None else "not_evaluated",
+            "work_arrangement_score": round(arrangement_points, 2) if arrangement_points is not None else "not_evaluated",
+            "total_score": round(total_score, 2),
+            "evaluatable_factors": len(evaluatable),
+        }
+
         return total_score, analysis
+
+    def _evaluate_location(
+        self,
+        location_reqs: List,
+        candidate_location: str,
+        job_location: str,
+        work_arrangement: str,
+    ) -> float:
+        """Return a 0.0-1.0 ratio for location fit."""
+        # Remote job — location irrelevant
+        if any("remote" in str(req).lower() for req in location_reqs) or work_arrangement == "remote_only":
+            return 1.0
+
+        # No location specified on the job
+        if not location_reqs and not job_location:
+            return 1.0
+
+        # Candidate has no location data — unknown fit
+        if not candidate_location:
+            return 0.5
+
+        # Remote-possible or hybrid: candidate location matters less
+        if work_arrangement in ("remote_possible", "hybrid"):
+            if job_location and (
+                candidate_location.lower() in job_location.lower()
+                or job_location.lower() in candidate_location.lower()
+            ):
+                return 1.0
+            return 0.7  # Hybrid/remote-possible tolerates distance
+
+        # Onsite or relocation required — strict location match
+        if job_location:
+            if (candidate_location.lower() in job_location.lower()
+                    or job_location.lower() in candidate_location.lower()):
+                return 1.0
+            return 0.3  # Different location, would need relocation
+
+        return 0.5  # Insufficient data
 
     def calculate_primary_skills_multiplier(self, job_requirements: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
         """Calculate primary skills penalty multiplier.

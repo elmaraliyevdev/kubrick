@@ -147,8 +147,8 @@ def validate_phone_format(phone: str) -> str:
     # Basic validation - should be 10-15 digits
     digits_only = re.sub(r'[^\d]', '', cleaned)
     
-    if len(digits_only) < 10 or len(digits_only) > 15:
-        raise ValueError("Phone number must be 10-15 digits")
+    if len(digits_only) < 7 or len(digits_only) > 15:
+        raise ValueError("Phone number must be 7-15 digits")
     
     return cleaned
 

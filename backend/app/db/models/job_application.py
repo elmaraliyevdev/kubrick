@@ -38,6 +38,10 @@ class JobApplication(Base):
     ai_summary = Column(Text, nullable=True)  # AI-generated candidate pitch
     ai_reasoning = Column(Text, nullable=True)  # Why this score was given
 
+    # Application form data
+    cover_letter = Column(Text, nullable=True)
+    custom_field_responses = Column(JSON, nullable=True)  # {"field_key": "value", ...}
+
     # Recruiter notes for this specific application
     recruiter_notes = Column(Text, nullable=True)
 

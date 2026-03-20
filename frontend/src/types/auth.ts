@@ -23,6 +23,12 @@ export interface OTPVerification {
 export interface Organization {
   id: number;
   name: string;
+  slug: string;
+  logo_url?: string | null;
+  description?: string | null;
+  website_url?: string | null;
+  brand_color?: string | null;
+  career_page_enabled?: boolean;
 }
 
 export interface User {

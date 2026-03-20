@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
+import json
+import logging
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 import uuid
@@ -8,11 +10,15 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.core.security import get_db
+from app.core.email import send_application_confirmation, send_new_application_notification
 from app.db.models.organization import Organization
 from app.db.models.job import Job
+from app.db.models.user import User
 from app.db.models.candidate import Candidate
 from app.db.models.candidate_file import CandidateFile
 from app.db.models.job_application import JobApplication
+from app.db.models.application_form_config import ApplicationFormConfig
+from app.db.models.custom_form_field import CustomFormField
 from app.schemas.public_careers import (
     PublicCareerPageResponse,
     PublicOrganizationResponse,
@@ -20,9 +26,12 @@ from app.schemas.public_careers import (
     PublicJobDetail,
     JobApplicationCreate,
     JobApplicationResponse,
+    PublicFormConfigResponse,
+    PublicCustomFieldResponse,
 )
-from app.api.files import get_resume_parser, save_work_experience
+from app.api.files import get_resume_parser, save_work_experience, calculate_experience_years
 
+logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
@@ -32,7 +41,29 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.doc', '.txt'}
 
 
-@router.get("/{org_slug}", response_model=PublicCareerPageResponse)
+def _get_form_config_for_org(org_id: int, db: Session) -> dict:
+    """Get the application form configuration for public display."""
+    config = db.query(ApplicationFormConfig).filter(
+        ApplicationFormConfig.organization_id == org_id
+    ).first()
+
+    custom_fields = (
+        db.query(CustomFormField)
+        .filter(CustomFormField.organization_id == org_id)
+        .order_by(CustomFormField.sort_order)
+        .all()
+    )
+
+    # Return defaults if no config exists
+    config_data = PublicFormConfigResponse.model_validate(config) if config else PublicFormConfigResponse()
+
+    return {
+        "config": config_data,
+        "custom_fields": [PublicCustomFieldResponse.model_validate(f) for f in custom_fields],
+    }
+
+
+@router.get("/{org_slug}")
 @limiter.limit("30/minute")
 def get_career_page(
     request: Request,
@@ -46,6 +77,9 @@ def get_career_page(
     org = db.query(Organization).filter(Organization.slug == org_slug).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
+
+    if not org.career_page_enabled:
+        raise HTTPException(status_code=404, detail="Career page is not available")
 
     query = db.query(Job).filter(
         Job.organization_id == org.id,
@@ -72,15 +106,18 @@ def get_career_page(
     )
     category_list = sorted([c[0] for c in categories])
 
-    return PublicCareerPageResponse(
-        organization=PublicOrganizationResponse.model_validate(org),
-        jobs=[PublicJobListItem.model_validate(j) for j in jobs],
-        total_count=len(jobs),
-        categories=category_list,
-    )
+    form_config = _get_form_config_for_org(org.id, db)
+
+    return {
+        "organization": PublicOrganizationResponse.model_validate(org),
+        "jobs": [PublicJobListItem.model_validate(j) for j in jobs],
+        "total_count": len(jobs),
+        "categories": category_list,
+        "application_form": form_config,
+    }
 
 
-@router.get("/{org_slug}/{job_slug}", response_model=PublicJobDetail)
+@router.get("/{org_slug}/{job_slug}")
 @limiter.limit("30/minute")
 def get_career_job_detail(
     request: Request,
@@ -91,6 +128,9 @@ def get_career_job_detail(
     org = db.query(Organization).filter(Organization.slug == org_slug).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
+
+    if not org.career_page_enabled:
+        raise HTTPException(status_code=404, detail="Career page is not available")
 
     job = (
         db.query(Job)
@@ -104,9 +144,13 @@ def get_career_job_detail(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Attach org for response serialization
     job.organization = org
-    return PublicJobDetail.model_validate(job)
+    form_config = _get_form_config_for_org(org.id, db)
+
+    return {
+        "job": PublicJobDetail.model_validate(job),
+        "application_form": form_config,
+    }
 
 
 @router.post("/{org_slug}/{job_slug}/apply", response_model=JobApplicationResponse)
@@ -115,6 +159,7 @@ async def apply_to_job(
     request: Request,
     org_slug: str,
     job_slug: str,
+    background_tasks: BackgroundTasks,
     first_name: str = Form(...),
     last_name: str = Form(...),
     email: str = Form(...),
@@ -123,6 +168,7 @@ async def apply_to_job(
     linkedin_url: Optional[str] = Form(None),
     portfolio_url: Optional[str] = Form(None),
     cover_letter: Optional[str] = Form(None),
+    custom_fields: Optional[str] = Form(None),  # JSON string of custom field responses
     resume: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -146,6 +192,9 @@ async def apply_to_job(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
+    if not org.career_page_enabled:
+        raise HTTPException(status_code=404, detail="Career page is not available")
+
     job = (
         db.query(Job)
         .filter(
@@ -157,6 +206,43 @@ async def apply_to_job(
     )
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Parse and validate custom fields
+    custom_field_responses = None
+    if custom_fields:
+        try:
+            custom_field_responses = json.loads(custom_fields)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=422, detail="Invalid custom fields format")
+
+        # Validate required custom fields
+        org_custom_fields = (
+            db.query(CustomFormField)
+            .filter(CustomFormField.organization_id == org.id)
+            .all()
+        )
+        for cf in org_custom_fields:
+            if cf.is_required and cf.field_key not in (custom_field_responses or {}):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Required field '{cf.label}' is missing"
+                )
+
+    # Validate required default fields based on form config
+    config = db.query(ApplicationFormConfig).filter(
+        ApplicationFormConfig.organization_id == org.id
+    ).first()
+    if config:
+        if config.show_phone and config.require_phone and not phone:
+            raise HTTPException(status_code=422, detail="Phone is required")
+        if config.show_location and config.require_location and not location:
+            raise HTTPException(status_code=422, detail="Location is required")
+        if config.show_linkedin and config.require_linkedin and not linkedin_url:
+            raise HTTPException(status_code=422, detail="LinkedIn URL is required")
+        if config.show_portfolio and config.require_portfolio and not portfolio_url:
+            raise HTTPException(status_code=422, detail="Portfolio URL is required")
+        if config.show_cover_letter and config.require_cover_letter and not cover_letter:
+            raise HTTPException(status_code=422, detail="Cover letter is required")
 
     # Validate resume file
     if not resume.filename:
@@ -173,7 +259,7 @@ async def apply_to_job(
     if len(file_content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large. Maximum size: 10MB")
 
-    # Check for existing candidate by email in org → reuse if found
+    # Check for existing candidate by email in org -> reuse if found
     candidate = (
         db.query(Candidate)
         .filter(Candidate.email == form_data.email, Candidate.organization_id == org.id)
@@ -209,7 +295,7 @@ async def apply_to_job(
                 portfolio_url=form_data.portfolio_url or personal_info.get("website"),
                 skills=all_skills if all_skills else None,
                 education=parsed_data.get("education"),
-                experience_years=len(work_experiences) if work_experiences else None,
+                experience_years=calculate_experience_years(work_experiences),
                 raw_resume_text=parsed_data.get("raw_text"),
                 organization_id=org.id,
                 added_by_id=None,
@@ -263,15 +349,41 @@ async def apply_to_job(
     )
     db.add(candidate_file)
 
-    # Create job application
+    # Create job application with cover letter and custom fields
     application = JobApplication(
         job_id=job.id,
         candidate_id=candidate.id,
         status="new",
+        cover_letter=form_data.cover_letter,
+        custom_field_responses=custom_field_responses,
     )
     db.add(application)
     db.commit()
     db.refresh(application)
+
+    # Send emails in the background (after response is sent)
+    candidate_name = f"{form_data.first_name} {form_data.last_name}"
+    job_title = job.title
+
+    # Confirmation to candidate
+    background_tasks.add_task(
+        send_application_confirmation, form_data.email, candidate_name, job_title, org.name
+    )
+
+    # Notification to org admins and recruiters
+    hr_users = (
+        db.query(User.email)
+        .filter(
+            User.organization_id == org.id,
+            User.role.in_(["admin", "recruiter"]),
+            User.email_verified == True,
+        )
+        .all()
+    )
+    for (hr_email,) in hr_users:
+        background_tasks.add_task(
+            send_new_application_notification, hr_email, candidate_name, form_data.email, job_title, org.name
+        )
 
     return JobApplicationResponse(
         message="Application submitted successfully",

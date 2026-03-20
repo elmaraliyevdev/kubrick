@@ -5,9 +5,10 @@ export interface Job {
   description: string
   location?: string
   employment_type: 'full_time' | 'part_time' | 'contract' | 'internship'
-  experience_level: 'junior' | 'mid' | 'senior' | 'lead'
-  salary_min?: number
-  salary_max?: number
+  responsibilities?: string[]
+  requirements?: string[]
+  nice_to_have?: string[]
+  benefits?: string[]
   skills_required?: string
   work_arrangement: 'remote_only' | 'remote_possible' | 'hybrid' | 'onsite' | 'relocation_required'
   status: 'open' | 'closed' | 'draft'
@@ -29,9 +30,10 @@ export interface JobCreate {
   description: string
   location?: string
   employment_type?: string
-  experience_level?: string
-  salary_min?: number
-  salary_max?: number
+  responsibilities?: string[]
+  requirements?: string[]
+  nice_to_have?: string[]
+  benefits?: string[]
   skills_required?: string
   work_arrangement?: string
   status?: string
@@ -43,9 +45,10 @@ export interface JobUpdate {
   description?: string
   location?: string
   employment_type?: string
-  experience_level?: string
-  salary_min?: number
-  salary_max?: number
+  responsibilities?: string[]
+  requirements?: string[]
+  nice_to_have?: string[]
+  benefits?: string[]
   skills_required?: string
   work_arrangement?: string
   status?: string

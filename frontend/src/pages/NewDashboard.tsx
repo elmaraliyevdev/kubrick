@@ -1,70 +1,173 @@
-import { useDashboardAnalytics, useQuickStats, useRecentCandidates } from '@/hooks/useAnalytics';
-import { useAuth } from '@/hooks/useAuth';
+import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
+import { useRecentCandidates } from "@/hooks/useAnalytics";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/utils/api";
+import { useNavigate } from "react-router-dom";
+
+function useDashboardStats() {
+  return useQuery({
+    queryKey: ["dashboard", "stats"],
+    queryFn: async () => {
+      const res = await api.get("/dashboard/stats");
+      return res.data as {
+        open_positions: number;
+        new_applications_7d: number;
+        candidates_to_review: number;
+        top_match_score: number | null;
+        trends: {
+          applications: number | null;
+        };
+      };
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: analytics, isLoading: analyticsLoading } = useDashboardAnalytics();
-  const { data: quickStats, isLoading: statsLoading } = useQuickStats();
+  const navigate = useNavigate();
+  const { data: stats, isLoading } = useDashboardStats();
   const { data: recentCandidates, isLoading: candidatesLoading } = useRecentCandidates(5);
 
-  if (analyticsLoading || statsLoading) {
+  if (isLoading) {
     return (
       <div className="p-6 space-y-8">
         <div className="h-6 w-48 bg-gray-100 rounded" />
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-gray-50 border border-gray-200 rounded-lg" />
+            <div
+              key={i}
+              className="h-32 bg-gray-50 border border-gray-200 rounded-xl animate-pulse"
+            />
           ))}
         </div>
       </div>
     );
   }
 
-  const metrics = analytics?.metrics;
-  const stats = quickStats;
-
-  const statItems = [
-    {
-      label: 'Total Candidates',
-      value: stats?.total_candidates?.toString() || '0',
-    },
-    {
-      label: 'Active Jobs',
-      value: metrics?.job_metrics.active_jobs?.toString() || '0',
-    },
-    {
-      label: 'Match Rate',
-      value: `${stats?.match_success_rate?.toFixed(1) || 0}%`,
-    },
-    {
-      label: 'Pending Reviews',
-      value: stats?.pending_applications?.toString() || '0',
-    },
-  ];
+  const appTrend = stats?.trends?.applications ?? 0;
+  const appTrendPositive = appTrend >= 0;
 
   return (
     <div className="p-6 space-y-8">
       {/* Welcome */}
-      <div className="mb-8">
+      <div>
         <p className="text-lg font-medium text-gray-900">
-          Welcome back, {user?.first_name || 'User'}
+          Welcome back, {user?.first_name || "User"}
         </p>
-        <p className="text-sm text-gray-500 mt-1">
-          Here's an overview of your hiring pipeline.
-        </p>
+        <p className="text-sm text-gray-500 mt-1">Here's an overview of your hiring pipeline.</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-6">
-        {statItems.map((item) => (
-          <div
-            key={item.label}
-            className="bg-white border border-gray-200 rounded-lg p-6"
-          >
-            <p className="text-sm text-gray-500 mb-1">{item.label}</p>
-            <p className="text-2xl font-semibold text-gray-900">{item.value}</p>
-          </div>
-        ))}
+      {/* Stat Cards */}
+      <div className="grid grid-cols-4 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+        {/* Open Positions */}
+        <Card className="@container/card">
+          <CardHeader>
+            <CardDescription>Open Positions</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {stats?.open_positions ?? 0}
+            </CardTitle>
+            <CardAction>
+              <Badge variant="outline" className="text-xs">
+                Active
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="flex-col items-start gap-1.5 text-sm">
+            <div className="text-muted-foreground">Jobs currently accepting applications</div>
+          </CardFooter>
+        </Card>
+
+        {/* New Applications (7d) */}
+        <Card className="@container/card">
+          <CardHeader>
+            <CardDescription>New Applications</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {stats?.new_applications_7d ?? 0}
+            </CardTitle>
+            <CardAction>
+              {appTrend !== 0 && (
+                <Badge variant="outline" className="text-xs">
+                  {appTrendPositive ? (
+                    <IconTrendingUp className="size-3.5" />
+                  ) : (
+                    <IconTrendingDown className="size-3.5" />
+                  )}
+                  {appTrendPositive ? "+" : ""}
+                  {appTrend}%
+                </Badge>
+              )}
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="flex-col items-start gap-1.5 text-sm">
+            {appTrend !== 0 && (
+              <div className="line-clamp-1 flex gap-2 font-medium">
+                {appTrendPositive ? "Up" : "Down"} vs previous week
+                {appTrendPositive ? (
+                  <IconTrendingUp className="size-4" />
+                ) : (
+                  <IconTrendingDown className="size-4" />
+                )}
+              </div>
+            )}
+            <div className="text-muted-foreground">Last 7 days</div>
+          </CardFooter>
+        </Card>
+
+        {/* Candidates to Review */}
+        <Card className="@container/card">
+          <CardHeader>
+            <CardDescription>To Review</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {stats?.candidates_to_review ?? 0}
+            </CardTitle>
+            <CardAction>
+              {(stats?.candidates_to_review ?? 0) > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  Needs attention
+                </Badge>
+              )}
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="flex-col items-start gap-1.5 text-sm">
+            <div className="text-muted-foreground">Unreviewed applications waiting</div>
+          </CardFooter>
+        </Card>
+
+        {/* Top Match Score */}
+        <Card className="@container/card">
+          <CardHeader>
+            <CardDescription>Top Match</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {stats?.top_match_score != null ? `${stats.top_match_score}%` : "—"}
+            </CardTitle>
+            <CardAction>
+              {stats?.top_match_score != null && stats.top_match_score >= 80 && (
+                <Badge variant="outline" className="text-xs">
+                  <IconTrendingUp className="size-3.5" />
+                  Excellent
+                </Badge>
+              )}
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="flex-col items-start gap-1.5 text-sm">
+            <div className="text-muted-foreground">
+              {stats?.top_match_score != null
+                ? "Best candidate-job match score"
+                : "Run matching to see scores"}
+            </div>
+          </CardFooter>
+        </Card>
       </div>
 
       {/* Recent Candidates */}
@@ -78,8 +181,9 @@ export default function Dashboard() {
               {recentCandidates.map((candidate, idx) => (
                 <div
                   key={candidate.id}
-                  className={`flex items-center justify-between py-3 ${
-                    idx < recentCandidates.length - 1 ? 'border-b border-gray-100' : ''
+                  onClick={() => navigate(`/candidates/${candidate.id}`)}
+                  className={`flex items-center justify-between py-3 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded ${
+                    idx < recentCandidates.length - 1 ? "border-b border-gray-100" : ""
                   }`}
                 >
                   <div className="flex items-center gap-6">

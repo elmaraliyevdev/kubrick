@@ -18,6 +18,107 @@ from app.services.llm_resume_parser import LLMResumeParser, RegexResumeParser, P
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def calculate_experience_years(work_experiences: list) -> Optional[int]:
+    """Calculate total years of experience from work experience date ranges.
+
+    Parses start_date/end_date (MM/YYYY or various formats) from each entry
+    and sums the durations. Falls back to counting positions if dates can't be parsed.
+    """
+    if not work_experiences:
+        return None
+
+    from datetime import datetime, date
+    import re
+
+    total_months = 0
+    parsed_any = False
+
+    for exp in work_experiences:
+        start_raw = exp.get("start_date", "")
+        end_raw = exp.get("end_date", "")
+
+        start = _parse_date(start_raw)
+        end = _parse_date(end_raw, default_to_now=True)
+
+        if start and end and end >= start:
+            months = (end.year - start.year) * 12 + (end.month - start.month)
+            total_months += max(months, 1)  # At least 1 month per position
+            parsed_any = True
+
+    if parsed_any:
+        years = round(total_months / 12)
+        return max(years, 1)  # At least 1 year if they have work experience
+
+    # Fallback: estimate ~2 years per position if dates can't be parsed
+    return len(work_experiences) * 2
+
+
+def _parse_date(date_str: str, default_to_now: bool = False):
+    """Parse a date string into a (year, month) date object.
+
+    Handles: MM/YYYY, YYYY-MM, YYYY, Month YYYY, "Present", "Current", etc.
+    """
+    from datetime import date
+    import re
+
+    if not date_str or not isinstance(date_str, str):
+        if default_to_now:
+            return date.today()
+        return None
+
+    date_str = date_str.strip()
+
+    # "Present", "Current", "Now", etc.
+    if re.match(r'(?i)^(present|current|now|ongoing|today)$', date_str):
+        return date.today()
+
+    # MM/YYYY or MM-YYYY
+    match = re.match(r'^(\d{1,2})[/\-](\d{4})$', date_str)
+    if match:
+        month, year = int(match.group(1)), int(match.group(2))
+        if 1 <= month <= 12 and 1950 <= year <= 2030:
+            return date(year, month, 1)
+
+    # YYYY-MM
+    match = re.match(r'^(\d{4})[/\-](\d{1,2})$', date_str)
+    if match:
+        year, month = int(match.group(1)), int(match.group(2))
+        if 1 <= month <= 12 and 1950 <= year <= 2030:
+            return date(year, month, 1)
+
+    # Month YYYY (e.g., "January 2020", "Jan 2020")
+    match = re.match(r'^([A-Za-z]+)\s+(\d{4})$', date_str)
+    if match:
+        month_str, year = match.group(1), int(match.group(2))
+        month = _month_to_number(month_str)
+        if month and 1950 <= year <= 2030:
+            return date(year, month, 1)
+
+    # Just a year (e.g., "2020")
+    match = re.match(r'^(\d{4})$', date_str)
+    if match:
+        year = int(match.group(1))
+        if 1950 <= year <= 2030:
+            return date(year, 1, 1)
+
+    if default_to_now:
+        return date.today()
+    return None
+
+
+def _month_to_number(month_str: str) -> Optional[int]:
+    """Convert month name/abbreviation to number."""
+    months = {
+        "jan": 1, "january": 1, "feb": 2, "february": 2,
+        "mar": 3, "march": 3, "apr": 4, "april": 4,
+        "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+        "aug": 8, "august": 8, "sep": 9, "september": 9,
+        "oct": 10, "october": 10, "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+    return months.get(month_str.lower().strip())
+
 # Configuration
 UPLOAD_DIR = Path("uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -191,10 +292,10 @@ async def upload_resume_create_candidate(
             # Regex parser format: ["skill1", "skill2", ...]
             all_skills = skills_info
         
-        # Calculate experience years from work experience
+        # Calculate experience years from work experience dates
         work_experiences = parsed_data.get("work_experience", [])
-        experience_years = len(work_experiences) if work_experiences else None
-        
+        experience_years = calculate_experience_years(work_experiences)
+
         # Create new candidate with parsed data
         candidate = Candidate(
             first_name=first_name,
@@ -411,8 +512,7 @@ async def upload_resume(
         # Calculate experience years from work experience if not already set
         work_experiences = parsed_data.get("work_experience", [])
         if work_experiences and not candidate.experience_years:
-            # Simple calculation based on number of positions
-            candidate.experience_years = len(work_experiences)
+            candidate.experience_years = calculate_experience_years(work_experiences)
         
         # Store raw resume text if available
         if hasattr(parsed_data, 'raw_text'):
@@ -568,9 +668,9 @@ async def bulk_upload_resumes(
                 elif isinstance(skills_info, list):
                     all_skills = skills_info
                 
-                # Calculate experience years from work experience
+                # Calculate experience years from work experience dates
                 work_experiences = parsed_data.get("work_experience", [])
-                experience_years = len(work_experiences) if work_experiences else None
+                experience_years = calculate_experience_years(work_experiences)
                 
                 # Create new candidate with all parsed data
                 candidate = Candidate(

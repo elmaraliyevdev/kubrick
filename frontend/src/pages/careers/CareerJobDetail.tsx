@@ -21,30 +21,19 @@ const EMPLOYMENT_TYPES: Record<string, string> = {
   internship: "Internship",
 };
 
-const EXPERIENCE_LEVELS: Record<string, string> = {
-  junior: "Junior",
-  mid: "Mid-Level",
-  senior: "Senior",
-  lead: "Lead",
-};
-
-function formatSalary(min?: number, max?: number): string | null {
-  if (!min && !max) return null;
-  const fmt = (n: number) =>
-    n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`;
-  if (min && max) return `${fmt(min)} - ${fmt(max)}`;
-  if (min) return `From ${fmt(min)}`;
-  return `Up to ${fmt(max!)}`;
-}
-
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".doc", ".txt"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-export default function CareerJobDetail() {
-  const { orgSlug, jobSlug } = useParams<{
+interface CareerJobDetailProps {
+  orgSlug?: string;
+}
+
+export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailProps) {
+  const { orgSlug: paramOrgSlug, jobSlug } = useParams<{
     orgSlug: string;
     jobSlug: string;
   }>();
+  const orgSlug = propSlug || paramOrgSlug;
   const { data: job, isLoading, error } = useCareerJobDetail(
     orgSlug || "",
     jobSlug || ""
@@ -125,7 +114,7 @@ export default function CareerJobDetail() {
           This job posting may have been closed or removed.
         </p>
         <Link
-          to={`/${orgSlug}`}
+          to={propSlug ? "/" : `/${orgSlug}`}
           className="text-sm text-blue-500 mt-4 inline-block hover:underline"
         >
           Back to all jobs
@@ -151,12 +140,27 @@ export default function CareerJobDetail() {
 
   if (!job) return null;
 
-  const salary = formatSalary(job.salary_min, job.salary_max);
+  const bulletSection = (title: string, items?: string[]) => {
+    if (!items || items.length === 0) return null;
+    return (
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-gray-900 mb-2">{title}</h3>
+        <ul className="space-y-1.5">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-gray-500 leading-relaxed">
+              <span className="text-gray-300 mt-0.5">•</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
 
   return (
     <div>
       <Link
-        to={`/${orgSlug}`}
+        to={propSlug ? "/" : `/${orgSlug}`}
         className="text-sm text-gray-500 hover:text-gray-900 mb-8 inline-block transition-colors"
       >
         Back to all jobs
@@ -175,42 +179,28 @@ export default function CareerJobDetail() {
             <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
               {WORK_ARRANGEMENTS[job.work_arrangement] || job.work_arrangement}
             </span>
+            {job.location && (
+              <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
+                {job.location}
+              </span>
+            )}
             {job.category && (
               <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
                 {job.category}
               </span>
             )}
-            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
-              {EXPERIENCE_LEVELS[job.experience_level] || job.experience_level}
-            </span>
           </div>
 
-          <div className="mb-8">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">
-              Description
-            </h3>
+          <div className="mb-6">
             <p className="text-sm text-gray-500 whitespace-pre-wrap leading-relaxed">
               {job.description}
             </p>
           </div>
 
-          {job.skills_required && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-2">
-                Skills Required
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {job.skills_required.split(",").map((skill) => (
-                  <span
-                    key={skill.trim()}
-                    className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
-                  >
-                    {skill.trim()}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {bulletSection("Responsibilities", job.responsibilities)}
+          {bulletSection("Requirements", job.requirements)}
+          {bulletSection("Nice to Have", job.nice_to_have)}
+          {bulletSection("Benefits", job.benefits)}
         </div>
 
         {/* Right sidebar */}
@@ -223,8 +213,7 @@ export default function CareerJobDetail() {
             <div className="space-y-3 text-sm text-gray-500">
               {job.location && <p>{job.location}</p>}
               <p>{EMPLOYMENT_TYPES[job.employment_type] || job.employment_type}</p>
-              <p>{EXPERIENCE_LEVELS[job.experience_level] || job.experience_level}</p>
-              {salary && <p>{salary}</p>}
+              <p>{WORK_ARRANGEMENTS[job.work_arrangement] || job.work_arrangement}</p>
               <p>
                 Posted{" "}
                 {new Date(job.created_at).toLocaleDateString("en-US", {

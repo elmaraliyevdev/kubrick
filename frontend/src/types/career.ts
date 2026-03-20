@@ -8,11 +8,8 @@ export interface PublicJobListItem {
   slug: string
   location?: string
   employment_type: string
-  experience_level: string
   work_arrangement: string
   category?: string
-  salary_min?: number
-  salary_max?: number
   created_at: string
 }
 
@@ -22,12 +19,12 @@ export interface PublicJobDetail {
   description: string
   location?: string
   employment_type: string
-  experience_level: string
   work_arrangement: string
   category?: string
-  salary_min?: number
-  salary_max?: number
-  skills_required?: string
+  responsibilities?: string[]
+  requirements?: string[]
+  nice_to_have?: string[]
+  benefits?: string[]
   created_at: string
   organization: PublicOrganization
 }

@@ -35,7 +35,7 @@ class JobRequirement(Base):
     needs_reparsing = Column(Boolean, default=False, nullable=False)
 
     # Relationships
-    job = relationship("Job", back_populates="requirements")
+    job = relationship("Job", back_populates="job_requirements")
 
     def __repr__(self):
         return f"<JobRequirement(job_id={self.job_id}, required_skills={len(self.required_skills or [])})>"

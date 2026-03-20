@@ -6,8 +6,11 @@ import { createSlice } from "@reduxjs/toolkit";
 export type { AuthState, Organization, User } from "@/types/auth";
 
 const initialState: AuthState = {
-  token: null, // Token is now managed via httpOnly cookie, not localStorage
-  user: localStorage.getItem("user") ? JSON.parse(localStorage.getItem("user")!) : null,
+  token: null,
+  user: localStorage.getItem("user")
+    ? JSON.parse(localStorage.getItem("user")!)
+    : null,
+  // Start as true if we have cached user data — ProtectedRoute will validate via /auth/me
   isAuthenticated: !!localStorage.getItem("user"),
   isLoading: false,
   error: null,
@@ -23,8 +26,11 @@ const authSlice = createSlice({
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
-    loginSuccess: (state, action: PayloadAction<{ token?: string; user?: User }>) => {
-      state.token = null; // Token lives in httpOnly cookie now
+    loginSuccess: (
+      state,
+      action: PayloadAction<{ token?: string; user?: User }>
+    ) => {
+      state.token = null;
       state.user = action.payload.user || null;
       state.isAuthenticated = true;
       state.isLoading = false;
@@ -52,6 +58,12 @@ const authSlice = createSlice({
   },
 });
 
-export const { setLoading, setError, loginSuccess, logout, setUser, clearError } =
-  authSlice.actions;
+export const {
+  setLoading,
+  setError,
+  loginSuccess,
+  logout,
+  setUser,
+  clearError,
+} = authSlice.actions;
 export default authSlice.reducer;

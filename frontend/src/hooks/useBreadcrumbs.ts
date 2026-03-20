@@ -1,3 +1,4 @@
+import { useCandidate } from "@/hooks/useCandidates";
 import { useJob } from "@/hooks/useJobs";
 import { useLocation, useParams } from "react-router-dom";
 
@@ -8,23 +9,57 @@ interface Breadcrumb {
 
 export function useBreadcrumbs(): Breadcrumb[] {
   const location = useLocation();
-  const { jobId } = useParams<{ jobId: string }>();
-  const { data: job } = useJob(parseInt(jobId || "0"));
-
+  const params = useParams<{ jobId: string; candidateId: string }>();
   const pathname = location.pathname;
 
-  // Handle job detail pages
+  const jobId = params.jobId ? parseInt(params.jobId) : 0;
+  const candidateId = params.candidateId ? parseInt(params.candidateId) : 0;
+
+  const { data: job } = useJob(jobId);
+  const { data: candidate } = useCandidate(candidateId);
+
+  // Job detail: Jobs > Job Title
   if (pathname.startsWith("/jobs/") && jobId) {
-    return [{ label: "Jobs", href: "/jobs" }, { label: job?.title || "Job Details" }];
+    return [
+      { label: "Jobs", href: "/jobs" },
+      { label: job?.title || "Job Details" },
+    ];
   }
 
-  // Handle other routes
+  // Candidate detail: Candidates > Name or Email
+  if (pathname.startsWith("/candidates/") && candidateId) {
+    const candidateLabel =
+      candidate?.first_name && candidate?.last_name
+        ? `${candidate.first_name} ${candidate.last_name}`
+        : candidate?.email || "Candidate Details";
+    return [
+      { label: "Candidates", href: "/candidates" },
+      { label: candidateLabel },
+    ];
+  }
+
+  // Settings sub-pages
+  if (pathname.startsWith("/settings/")) {
+    const settingsRoutes: Record<string, string> = {
+      "/settings/profile": "Profile",
+      "/settings/organization": "Organization",
+      "/settings/career-page": "Career Page",
+    };
+    const subLabel = settingsRoutes[pathname];
+    if (subLabel) {
+      return [
+        { label: "Settings", href: "/settings/profile" },
+        { label: subLabel },
+      ];
+    }
+  }
+
+  // Top-level routes
   const routeMap: Record<string, Breadcrumb[]> = {
     "/dashboard": [{ label: "Dashboard" }],
     "/jobs": [{ label: "Jobs" }],
     "/candidates": [{ label: "Candidates" }],
     "/analytics": [{ label: "Analytics" }],
-    "/settings": [{ label: "Settings" }],
   };
 
   return routeMap[pathname] || [{ label: "Dashboard" }];

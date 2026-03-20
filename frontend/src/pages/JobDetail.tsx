@@ -6,7 +6,7 @@ import { matchesApi } from "@/services/matches";
 import type { CandidateMatch, MatchCalculationResult } from "@/types/match";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 export default function JobDetail() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -49,7 +49,10 @@ export default function JobDetail() {
   const loadRequirements = useCallback(async () => {
     if (!job?.id) return;
     try {
-      const data = await matchesApi.getJobRequirements(job.id) as unknown as Record<string, unknown>;
+      const data = (await matchesApi.getJobRequirements(job.id)) as unknown as Record<
+        string,
+        unknown
+      >;
       const reqs = data.requirements as Record<string, unknown> | undefined;
       setPrimarySkills((reqs?.primary_skills as string[]) || []);
       setRequiredSkills((reqs?.required_skills as string[]) || []);
@@ -88,13 +91,6 @@ export default function JobDetail() {
 
   const handleViewDetails = (candidateId: number) => {
     navigate(`/candidates/${candidateId}`);
-  };
-
-  const formatSalary = (min?: number, max?: number) => {
-    if (!min && !max) return "Not specified";
-    if (min && max) return `$${min.toLocaleString()} - $${max.toLocaleString()}`;
-    if (min) return `$${min.toLocaleString()}+`;
-    return `Up to $${max?.toLocaleString()}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -138,11 +134,6 @@ export default function JobDetail() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Back link */}
-      <Link to="/jobs" className="text-sm text-gray-500 hover:text-gray-700">
-        &larr; Back to jobs
-      </Link>
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -170,16 +161,8 @@ export default function JobDetail() {
           <span className="text-gray-900 capitalize">{job.employment_type.replace("_", " ")}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Experience Level</span>
-          <span className="text-gray-900 capitalize">{job.experience_level}</span>
-        </div>
-        <div className="flex justify-between text-sm">
           <span className="text-gray-500">Work Arrangement</span>
           <span className="text-gray-900 capitalize">{job.work_arrangement.replace("_", " ")}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Salary</span>
-          <span className="text-gray-900">{formatSalary(job.salary_min, job.salary_max)}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-500">Posted</span>
@@ -257,7 +240,10 @@ export default function JobDetail() {
                 <p className="text-xs text-gray-500 mb-2">Primary</p>
                 <div className="flex flex-wrap gap-2">
                   {primarySkills.map((skill) => (
-                    <span key={skill} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
+                    <span
+                      key={skill}
+                      className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                    >
                       {skill}
                     </span>
                   ))}
@@ -270,7 +256,10 @@ export default function JobDetail() {
                 <p className="text-xs text-gray-500 mb-2">Required</p>
                 <div className="flex flex-wrap gap-2">
                   {requiredSkills.map((skill) => (
-                    <span key={skill} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
+                    <span
+                      key={skill}
+                      className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                    >
                       {skill}
                     </span>
                   ))}
@@ -283,7 +272,10 @@ export default function JobDetail() {
                 <p className="text-xs text-gray-500 mb-2">Nice to Have</p>
                 <div className="flex flex-wrap gap-2">
                   {niceToHaveSkills.map((skill) => (
-                    <span key={skill} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
+                    <span
+                      key={skill}
+                      className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                    >
                       {skill}
                     </span>
                   ))}
@@ -291,15 +283,16 @@ export default function JobDetail() {
               </div>
             )}
 
-            {!requiredSkills.length && !niceToHaveSkills.length && !primarySkills.length && (
-              job.skills_required ? (
+            {!requiredSkills.length &&
+              !niceToHaveSkills.length &&
+              !primarySkills.length &&
+              (job.skills_required ? (
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{job.skills_required}</p>
               ) : (
                 <p className="text-sm text-gray-500">
                   Click "Re-parse" to extract skills from the job description.
                 </p>
-              )
-            )}
+              ))}
           </div>
         </div>
       )}
@@ -329,12 +322,7 @@ export default function JobDetail() {
         </div>
       )}
 
-      <JobDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        job={job}
-        mode="edit"
-      />
+      <JobDrawer open={drawerOpen} onOpenChange={setDrawerOpen} job={job} mode="edit" />
     </div>
   );
 }

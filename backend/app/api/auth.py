@@ -3,22 +3,47 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 import secrets
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from app.core.validation import RateLimitConfig, validate_search_query
-from app.core.security import get_current_user, get_db, set_auth_cookie, clear_auth_cookie, logout_user
-from app.core.email import send_template_email, send_login_otp, send_email_verification, send_password_reset_otp, POSTMARK_OTP_TEMPLATE_ID
+from app.core.validation import RateLimitConfig
+from app.core.security import (
+    get_current_user, get_db,
+    set_auth_cookies, clear_auth_cookies,
+    logout_user,
+    create_access_token, create_refresh_token,
+    validate_refresh_token, revoke_refresh_token, revoke_all_user_refresh_tokens,
+    hash_password, verify_password,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+)
+from app.core.email import send_login_otp, send_email_verification, send_password_reset_otp
 from app.db.models.user import User
 from app.db.models.otp_code import OtpCode
 from app.db.models.organization import Organization
 from app.schemas.user import UserCreate, UserResponse, CompleteProfileRequest, UpdateProfileRequest
 from app.schemas.auth import RequestCodeRequest, VerifyCodeRequest, LoginPasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
-from app.core.security import hash_password, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from fastapi.responses import JSONResponse
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["auth"])
+
+
+def _create_auth_response(user: User, db: Session, request: Request) -> JSONResponse:
+    """Create a JSON response with access + refresh token cookies set."""
+    access_token = create_access_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(
+        user_id=user.id,
+        db=db,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "token_type": "bearer",
+    })
+    set_auth_cookies(response, access_token, refresh_token, request)
+    return response
+
 
 # -------------------------
 # Register
@@ -29,7 +54,6 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Parse full_name into first_name and last_name
     first_name = None
     last_name = None
     if user.full_name:
@@ -42,20 +66,19 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(user.password),
         first_name=first_name,
         last_name=last_name,
-        organization_id=None,   # 👈 no org required yet
-        email_verified=False    # 👈 not verified initially
+        organization_id=None,
+        email_verified=False,
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
 
-    # Send email verification code
     code = str(secrets.SystemRandom().randint(100000, 999999))
     otp = OtpCode(
         email=user.email,
         code=code,
         code_type="email_verification",
-        expires_at=datetime.utcnow() + timedelta(minutes=10)
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
     )
     db.add(otp)
     db.commit()
@@ -64,13 +87,16 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
 
     return db_user
 
+
+# -------------------------
+# Complete profile
+# -------------------------
 @router.post("/complete-profile", response_model=UserResponse)
 def complete_profile(
     payload: CompleteProfileRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Atomically get or create organization to avoid race conditions
     org = db.query(Organization).filter(
         Organization.name == payload.organization_name
     ).first()
@@ -83,32 +109,30 @@ def complete_profile(
             db.add(org)
             db.flush()
         except IntegrityError:
-            # Another request created it concurrently — roll back and fetch
             db.rollback()
             org = db.query(Organization).filter(
                 Organization.name == payload.organization_name
             ).first()
 
-    # Update user profile - get user from current db session instead of dependency
     user_to_update = db.query(User).filter(User.id == current_user.id).first()
     if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     user_to_update.first_name = payload.first_name
     user_to_update.last_name = payload.last_name
     user_to_update.organization_id = org.id
 
     db.commit()
-    
-    # Query fresh user data with organization relationship
+
     updated_user = (
         db.query(User)
         .options(joinedload(User.organization))
         .filter(User.id == current_user.id)
         .first()
     )
-    
+
     return updated_user
+
 
 # -------------------------
 # Login with password
@@ -120,12 +144,8 @@ def login_password(request: Request, payload: LoginPasswordRequest, db: Session 
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+    return _create_auth_response(user, db, request)
 
-    response = JSONResponse(content={"access_token": token, "token_type": "bearer"})
-    set_auth_cookie(response, token, request)
-    return response
 
 # -------------------------
 # Request OTP
@@ -133,14 +153,13 @@ def login_password(request: Request, payload: LoginPasswordRequest, db: Session 
 @limiter.limit(RateLimitConfig.get_rate('auth'))
 @router.post("/request-code")
 async def request_code(request: Request, payload: RequestCodeRequest, db: Session = Depends(get_db)):
-    # Use cryptographically secure random number generation
     code = str(secrets.SystemRandom().randint(100000, 999999))
 
     otp = OtpCode(
         email=payload.email,
         code=code,
         code_type="login",
-        expires_at=datetime.utcnow() + timedelta(minutes=10)
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
     )
     db.add(otp)
     db.commit()
@@ -148,6 +167,7 @@ async def request_code(request: Request, payload: RequestCodeRequest, db: Sessio
     await send_login_otp(payload.email, code)
 
     return {"message": "Verification code sent"}
+
 
 # -------------------------
 # Resend Email Verification
@@ -158,23 +178,23 @@ async def resend_verification(request: Request, payload: RequestCodeRequest, db:
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User does not exist")
-    
+
     if user.email_verified:
         raise HTTPException(status_code=400, detail="Email already verified")
 
-    # Generate new verification code
     code = str(secrets.SystemRandom().randint(100000, 999999))
     otp = OtpCode(
         email=payload.email,
         code=code,
         code_type="email_verification",
-        expires_at=datetime.utcnow() + timedelta(minutes=10)
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
     )
     db.add(otp)
     db.commit()
 
     await send_email_verification(payload.email, code)
     return {"message": "Verification code sent"}
+
 
 # -------------------------
 # Verify OTP
@@ -192,7 +212,6 @@ def verify_code(request: Request, payload: VerifyCodeRequest, db: Session = Depe
     if not otp or otp.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
-    # Delete OTP immediately to prevent reuse in a race condition
     otp_code_type = otp.code_type
     db.delete(otp)
     db.commit()
@@ -201,29 +220,44 @@ def verify_code(request: Request, payload: VerifyCodeRequest, db: Session = Depe
     if not user:
         raise HTTPException(status_code=404, detail="User does not exist")
 
-    # Handle email verification
     if otp_code_type == "email_verification":
         if user.email_verified:
             raise HTTPException(status_code=400, detail="Email already verified")
         user.email_verified = True
         db.commit()
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = create_access_token(
-        data={"sub": user.email},
-        expires_delta=access_token_expires,
-    )
+    return _create_auth_response(user, db, request)
 
-    response = JSONResponse(content={"access_token": token, "token_type": "bearer"})
-    set_auth_cookie(response, token, request)
-    return response
+
+# -------------------------
+# Refresh token
+# -------------------------
+@router.post("/refresh")
+def refresh_token_endpoint(request: Request, db: Session = Depends(get_db)):
+    """Exchange a valid refresh token for a new access + refresh token pair."""
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+
+    rt = validate_refresh_token(token, db)
+    if not rt:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    user = db.query(User).filter(User.id == rt.user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    # Rotate: revoke the old refresh token and issue a new pair
+    revoke_refresh_token(token, db)
+
+    return _create_auth_response(user, db, request)
+
 
 # -------------------------
 # Get current user profile
 # -------------------------
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Fetch user with organization relationship eagerly loaded
     user_with_org = (
         db.query(User)
         .options(joinedload(User.organization))
@@ -231,6 +265,7 @@ def get_me(current_user: User = Depends(get_current_user), db: Session = Depends
         .first()
     )
     return user_with_org
+
 
 # -------------------------
 # Update profile
@@ -260,18 +295,26 @@ def update_me(
     )
     return updated_user
 
+
 # -------------------------
 # Logout
 # -------------------------
 @router.post("/logout")
 def logout_endpoint(request: Request, db: Session = Depends(get_db)):
-    token = request.cookies.get("access_token")
-    if token:
-        logout_user(token, db)
+    # Blacklist access token
+    access_token = request.cookies.get("access_token")
+    if access_token:
+        logout_user(access_token, db)
+
+    # Revoke refresh token
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        revoke_refresh_token(refresh_token, db)
 
     response = JSONResponse(content={"message": "Logged out"})
-    clear_auth_cookie(response, request)
+    clear_auth_cookies(response, request)
     return response
+
 
 # -------------------------
 # Forgot password
@@ -279,7 +322,6 @@ def logout_endpoint(request: Request, db: Session = Depends(get_db)):
 @limiter.limit(RateLimitConfig.get_rate('auth'))
 @router.post("/forgot-password")
 async def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    # Always return the same message to prevent email enumeration
     message = "If an account with that email exists, a password reset code has been sent."
 
     user = db.query(User).filter(User.email == payload.email).first()
@@ -291,7 +333,7 @@ async def forgot_password(request: Request, payload: ForgotPasswordRequest, db: 
         email=payload.email,
         code=code,
         code_type="password_reset",
-        expires_at=datetime.utcnow() + timedelta(minutes=10)
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
     )
     db.add(otp)
     db.commit()
@@ -299,6 +341,7 @@ async def forgot_password(request: Request, payload: ForgotPasswordRequest, db: 
     await send_password_reset_otp(payload.email, code)
 
     return {"message": message}
+
 
 # -------------------------
 # Reset password
@@ -320,7 +363,6 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
     if not otp or otp.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
-    # Delete OTP to prevent reuse
     db.delete(otp)
     db.commit()
 
@@ -330,5 +372,8 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
 
     user.hashed_password = hash_password(payload.new_password)
     db.commit()
+
+    # Revoke all existing sessions after password change
+    revoke_all_user_refresh_tokens(user.id, db)
 
     return {"message": "Password has been reset successfully"}

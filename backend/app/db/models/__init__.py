@@ -23,6 +23,10 @@ from .matching_algorithm_config import MatchingAlgorithmConfig
 from .token_blacklist import TokenBlacklist
 from .refresh_token import RefreshToken
 
+# Import career page models
+from .application_form_config import ApplicationFormConfig
+from .custom_form_field import CustomFormField
+
 # Make them available for import
 __all__ = [
     "OtpCode",
@@ -39,4 +43,6 @@ __all__ = [
     "MatchingAlgorithmConfig",
     "TokenBlacklist",
     "RefreshToken",
+    "ApplicationFormConfig",
+    "CustomFormField",
 ]

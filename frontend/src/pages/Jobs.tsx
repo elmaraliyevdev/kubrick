@@ -32,15 +32,9 @@ export default function Jobs() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-lg font-medium text-gray-900">Jobs</h1>
-        <button
-          onClick={handleCreateJob}
-          className="bg-gray-900 text-white rounded-md h-9 px-4 text-sm hover:bg-gray-800"
-        >
-          New job
-        </button>
+    <div className="px-4 lg:px-6 py-4">
+      <div className="mb-4">
+        <h1 className="text-lg font-medium text-foreground">Jobs</h1>
       </div>
 
       <JobsDataTable

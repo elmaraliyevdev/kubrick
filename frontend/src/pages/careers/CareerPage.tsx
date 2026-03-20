@@ -40,17 +40,13 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDays / 365)} years ago`;
 }
 
-function formatSalary(min?: number, max?: number): string | null {
-  if (!min && !max) return null;
-  const fmt = (n: number) =>
-    n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`;
-  if (min && max) return `${fmt(min)} - ${fmt(max)}`;
-  if (min) return `From ${fmt(min)}`;
-  return `Up to ${fmt(max!)}`;
+interface CareerPageProps {
+  orgSlug?: string;
 }
 
-export default function CareerPage() {
-  const { orgSlug } = useParams<{ orgSlug: string }>();
+export default function CareerPage({ orgSlug: propSlug }: CareerPageProps) {
+  const { orgSlug: paramSlug } = useParams<{ orgSlug: string }>();
+  const orgSlug = propSlug || paramSlug;
   const [filters, setFilters] = useState<CareerPageFilters>({});
   const [searchInput, setSearchInput] = useState("");
 
@@ -214,9 +210,8 @@ export default function CareerPage() {
             </p>
             <div className="space-y-2">
               {data.jobs.map((job) => {
-                const salary = formatSalary(job.salary_min, job.salary_max);
                 return (
-                  <Link key={job.slug} to={`/${orgSlug}/${job.slug}`}>
+                  <Link key={job.slug} to={propSlug ? `/${job.slug}` : `/${orgSlug}/${job.slug}`}>
                     <div className="bg-white border border-gray-200 rounded-lg p-6 hover:border-gray-300 transition-colors cursor-pointer">
                       <h3 className="text-sm font-medium text-gray-900 mb-2">
                         {job.title}
@@ -227,9 +222,6 @@ export default function CareerPage() {
                           {EMPLOYMENT_TYPES[job.employment_type] || job.employment_type}
                         </span>
                         <span>{timeAgo(job.created_at)}</span>
-                        {salary && (
-                          <span className="text-gray-900 font-medium">{salary}</span>
-                        )}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">

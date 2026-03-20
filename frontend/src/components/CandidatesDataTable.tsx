@@ -10,19 +10,36 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal } from "lucide-react";
+import {
+  IconArrowsSort,
+  IconChevronLeft,
+  IconChevronRight,
+  IconDotsVertical,
+  IconLayoutColumns,
+  IconPlus,
+  IconUpload,
+} from "@tabler/icons-react";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useDeleteCandidate } from "@/hooks/useCandidates";
 import type { CandidateListItem } from "@/types/candidate";
 
@@ -31,24 +48,26 @@ interface CandidatesDataTableProps {
   isLoading?: boolean;
   onCreateCandidate?: () => void;
   onEditCandidate?: (candidate: CandidateListItem) => void;
+  onUpload?: () => void;
 }
 
 export function CandidatesDataTable({
   data,
   isLoading,
-  onCreateCandidate: _onCreateCandidate,
+  onCreateCandidate,
   onEditCandidate,
+  onUpload,
 }: CandidatesDataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
-    skills: false,
-    latest_application_status: false,
-  });
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [columnFilters, setColumnFilters] =
+    React.useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({
+      skills: false,
+      latest_application_status: false,
+    });
 
   const deleteCandidateMutation = useDeleteCandidate();
-
   const navigate = useNavigate();
 
   const getFullName = (candidate: CandidateListItem) => {
@@ -66,91 +85,71 @@ export function CandidatesDataTable({
 
   const columns: ColumnDef<CandidateListItem>[] = [
     {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
+      id: "name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-3 h-8"
+        >
+          Name
+          <IconArrowsSort className="size-3.5" />
+        </Button>
       ),
       cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
+        <span className="font-medium">{getFullName(row.original)}</span>
       ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      id: "name",
-      header: ({ column }) => {
-        return (
-          <button
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide hover:text-gray-700"
-          >
-            Name
-            <ArrowUpDown className="h-3 w-3" />
-          </button>
-        );
-      },
-      cell: ({ row }) => {
-        const candidate = row.original;
-        return <div className="text-sm font-medium text-gray-900">{getFullName(candidate)}</div>;
-      },
       sortingFn: (rowA, rowB) => {
-        const nameA = getFullName(rowA.original);
-        const nameB = getFullName(rowB.original);
-        return nameA.localeCompare(nameB);
+        return getFullName(rowA.original).localeCompare(
+          getFullName(rowB.original)
+        );
       },
     },
     {
       accessorKey: "email",
-      header: () => <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</span>,
+      header: "Email",
       cell: ({ row }) => {
         const email = row.getValue("email") as string;
         return email ? (
-          <span className="text-sm text-gray-900">{email}</span>
+          <span>{email}</span>
         ) : (
-          <span className="text-sm text-gray-400">No email</span>
+          <span className="text-muted-foreground">—</span>
         );
       },
     },
     {
       accessorKey: "location",
-      header: () => <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</span>,
+      header: "Location",
       cell: ({ row }) => {
         const location = row.getValue("location") as string;
-        return location ? (
-          <span className="text-sm text-gray-500">{location}</span>
-        ) : (
-          <span className="text-sm text-gray-400">Not specified</span>
+        return (
+          <span className="text-muted-foreground">{location || "—"}</span>
         );
       },
     },
     {
       accessorKey: "skills",
-      header: () => <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Skills</span>,
+      header: "Skills",
       cell: ({ row }) => {
         const skills = row.getValue("skills") as string[];
         if (!skills || skills.length === 0) {
-          return <span className="text-sm text-gray-400">No skills</span>;
+          return <span className="text-muted-foreground">—</span>;
         }
         return (
           <div className="flex flex-wrap gap-1">
             {skills.slice(0, 2).map((skill, index) => (
-              <span key={index} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
+              <span
+                key={index}
+                className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs"
+              >
                 {skill}
               </span>
             ))}
             {skills.length > 2 && (
-              <span className="text-xs text-gray-400">+{skills.length - 2}</span>
+              <span className="text-xs text-muted-foreground">
+                +{skills.length - 2}
+              </span>
             )}
           </div>
         );
@@ -158,22 +157,23 @@ export function CandidatesDataTable({
     },
     {
       accessorKey: "experience_years",
-      header: ({ column }) => {
-        return (
-          <button
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide hover:text-gray-700"
-          >
-            Experience
-            <ArrowUpDown className="h-3 w-3" />
-          </button>
-        );
-      },
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-3 h-8"
+        >
+          Experience
+          <IconArrowsSort className="size-3.5" />
+        </Button>
+      ),
       cell: ({ row }) => {
         const years = row.getValue("experience_years") as number;
-        if (!years) return <span className="text-sm text-gray-400">Not specified</span>;
+        if (!years)
+          return <span className="text-muted-foreground">—</span>;
         return (
-          <span className="text-sm text-gray-500">
+          <span className="text-muted-foreground">
             {years} year{years !== 1 ? "s" : ""}
           </span>
         );
@@ -181,53 +181,37 @@ export function CandidatesDataTable({
     },
     {
       accessorKey: "latest_application_status",
-      header: () => <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Latest Status</span>,
+      header: "Status",
       cell: ({ row }) => {
         const status = row.getValue("latest_application_status") as string;
         if (!status) {
-          return <span className="text-sm text-gray-400">No applications</span>;
+          return <span className="text-muted-foreground">—</span>;
         }
         return (
-          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs capitalize">
+          <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs capitalize">
             {status}
           </span>
         );
       },
     },
     {
-      accessorKey: "job_applications_count",
-      header: ({ column }) => {
-        return (
-          <button
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide hover:text-gray-700"
-          >
-            Applications
-            <ArrowUpDown className="h-3 w-3" />
-          </button>
-        );
-      },
-      cell: ({ row }) => {
-        const count = row.getValue("job_applications_count") as number;
-        return <span className="text-sm font-medium text-gray-900">{count}</span>;
-      },
-    },
-    {
       accessorKey: "created_at",
-      header: ({ column }) => {
-        return (
-          <button
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide hover:text-gray-700"
-          >
-            Added
-            <ArrowUpDown className="h-3 w-3" />
-          </button>
-        );
-      },
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-3 h-8"
+        >
+          Added
+          <IconArrowsSort className="size-3.5" />
+        </Button>
+      ),
       cell: ({ row }) => {
         const date = row.getValue("created_at") as string;
-        return <span className="text-sm text-gray-500">{formatDate(date)}</span>;
+        return (
+          <span className="text-muted-foreground">{formatDate(date)}</span>
+        );
       },
     },
     {
@@ -238,14 +222,19 @@ export function CandidatesDataTable({
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground data-[state=open]:bg-muted"
+              >
+                <IconDotsVertical className="size-4" />
                 <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
+              </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => navigate(`/candidates/${candidate.id}`)}>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem
+                onClick={() => navigate(`/candidates/${candidate.id}`)}
+              >
                 View details
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEditCandidate?.(candidate)}>
@@ -253,14 +242,18 @@ export function CandidatesDataTable({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-red-600"
+                className="text-destructive focus:text-destructive"
                 onClick={() => {
-                  if (confirm("Are you sure you want to delete this candidate?")) {
+                  if (
+                    confirm(
+                      "Are you sure you want to delete this candidate?"
+                    )
+                  ) {
                     deleteCandidateMutation.mutate(candidate.id);
                   }
                 }}
               >
-                Delete candidate
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -279,86 +272,142 @@ export function CandidatesDataTable({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
-      rowSelection,
     },
   });
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between pb-4">
-        <input
+    <div className="flex flex-col gap-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <Input
           placeholder="Search candidates..."
           value={(table.getColumn("email")?.getFilterValue() as string) ?? ""}
-          onChange={(event) => table.getColumn("email")?.setFilterValue(event.target.value)}
-          className="max-w-sm border border-gray-200 rounded-md h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          onChange={(event) =>
+            table.getColumn("email")?.setFilterValue(event.target.value)
+          }
+          className="h-9 w-64"
         />
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <IconLayoutColumns className="size-4" />
+                Columns
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {table
+                .getAllColumns()
+                .filter(
+                  (column) =>
+                    typeof column.accessorFn !== "undefined" &&
+                    column.getCanHide()
+                )
+                .map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="capitalize"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) =>
+                      column.toggleVisibility(!!value)
+                    }
+                  >
+                    {column.id}
+                  </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {onUpload && (
+            <Button variant="outline" size="sm" onClick={onUpload}>
+              <IconUpload className="size-4" />
+              Upload
+            </Button>
+          )}
+          {onCreateCandidate && (
+            <Button size="sm" onClick={onCreateCandidate}>
+              <IconPlus className="size-4" />
+              Add Candidate
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead>
+
+      {/* Table */}
+      <div className="overflow-hidden rounded-lg border border-border">
+        <Table>
+          <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="bg-gray-50 border-b border-gray-200">
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <th key={header.id} className="px-4 py-3 text-left">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  );
-                })}
-              </tr>
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                ))}
+              </TableRow>
             ))}
-          </thead>
-          <tbody>
+          </TableHeader>
+          <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-gray-100 hover:bg-gray-50"
-                  data-state={row.getIsSelected() && "selected"}
-                >
+                <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))
             ) : (
-              <tr>
-                <td colSpan={columns.length} className="h-24 text-center text-sm text-gray-500">
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   {isLoading ? "Loading..." : "No candidates found."}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
-      <div className="flex items-center justify-end gap-2 pt-4">
-        <div className="flex-1 text-sm text-gray-500">
-          {table.getFilteredSelectedRowModel().rows.length} of{" "}
-          {table.getFilteredRowModel().rows.length} row(s) selected.
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          {table.getFilteredRowModel().rows.length} candidate(s) total.
         </div>
-        <button
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
-          className="border border-gray-200 text-gray-700 rounded-md h-9 px-4 text-sm hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none"
-        >
-          Previous
-        </button>
-        <button
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-          className="border border-gray-200 text-gray-700 rounded-md h-9 px-4 text-sm hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none"
-        >
-          Next
-        </button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            <IconChevronLeft className="size-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+          >
+            <IconChevronRight className="size-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

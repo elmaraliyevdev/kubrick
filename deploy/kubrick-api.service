@@ -1,0 +1,23 @@
+# Kubrick API — systemd service
+# Copy to /etc/systemd/system/kubrick-api.service
+# Then: sudo systemctl daemon-reload && sudo systemctl enable --now kubrick-api
+
+[Unit]
+Description=Kubrick API (FastAPI/Uvicorn)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=kubrick
+Group=kubrick
+WorkingDirectory=/home/kubrick/kubrick/backend
+EnvironmentFile=/home/kubrick/kubrick/backend/.env
+ExecStart=/home/kubrick/kubrick/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

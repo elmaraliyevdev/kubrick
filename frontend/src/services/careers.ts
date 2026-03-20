@@ -16,10 +16,7 @@ export const getCareerPage = async (
   if (filters?.employment_type) params.employment_type = filters.employment_type;
   if (filters?.search) params.search = filters.search;
 
-  const { data } = await publicApi.get<CareerPageResponse>(
-    `/careers/${orgSlug}`,
-    { params }
-  );
+  const { data } = await publicApi.get(`/careers/${orgSlug}`, { params });
   return data;
 };
 
@@ -27,10 +24,9 @@ export const getJobDetail = async (
   orgSlug: string,
   jobSlug: string
 ): Promise<PublicJobDetail> => {
-  const { data } = await publicApi.get<PublicJobDetail>(
-    `/careers/${orgSlug}/${jobSlug}`
-  );
-  return data;
+  const { data } = await publicApi.get(`/careers/${orgSlug}/${jobSlug}`);
+  // API returns { job: {...}, application_form: {...} } — unwrap
+  return data.job || data;
 };
 
 export const applyToJob = async (
@@ -38,7 +34,7 @@ export const applyToJob = async (
   jobSlug: string,
   formData: FormData
 ): Promise<JobApplicationResponse> => {
-  const { data } = await publicApi.post<JobApplicationResponse>(
+  const { data } = await publicApi.post(
     `/careers/${orgSlug}/${jobSlug}/apply`,
     formData,
     { headers: { "Content-Type": "multipart/form-data" } }
