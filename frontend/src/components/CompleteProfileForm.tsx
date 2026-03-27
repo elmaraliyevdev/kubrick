@@ -1,8 +1,10 @@
 import api from "@/utils/api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setUser } from "@/store/authSlice";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/store";
 
 type CompleteProfileValues = {
   first_name: string;
@@ -19,8 +21,24 @@ export function CompleteProfileForm() {
     last_name: "",
     organization_name: "",
   });
+  const [didPrefill, setDidPrefill] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const user = useSelector((state: RootState) => state.auth.user);
+
+  // Pre-fill names from the registration step (backend splits `full_name` into first/last),
+  // then request only what's missing (usually `organization_name`).
+  useEffect(() => {
+    if (!user || didPrefill) return;
+
+    setForm({
+      first_name: user.first_name ?? "",
+      last_name: user.last_name ?? "",
+      organization_name: user.organization?.name ?? "",
+    });
+    setDidPrefill(true);
+  }, [user, didPrefill]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });

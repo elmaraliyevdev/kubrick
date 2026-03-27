@@ -15,6 +15,7 @@ import { useMemo } from "react";
 import { List as FixedSizeList } from "react-window";
 
 import { MatchScoreCard } from "./MatchScoreCard";
+import { MatchAnalysisDetails } from "./MatchAnalysisDetails";
 
 interface VirtualizedCandidatesListProps {
   candidates: CandidateMatch[];
@@ -148,7 +149,10 @@ function CandidateItem(props: {
                         {candidate.candidate.last_name}
                       </DialogTitle>
                     </DialogHeader>
-                    <MatchScoreCard match={candidate.match} showDetails={true} size="lg" />
+                    <>
+                      <MatchScoreCard match={candidate.match} showDetails={true} size="lg" />
+                      <MatchAnalysisDetails match={candidate.match} />
+                    </>
                   </DialogContent>
                 </Dialog>
 

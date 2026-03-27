@@ -18,6 +18,10 @@ from app.schemas.application_form import (
 
 router = APIRouter()
 
+def _require_email_verified(user: User):
+    if not user.email_verified:
+        raise HTTPException(status_code=403, detail="Email must be verified to access application form settings")
+
 
 def _get_or_create_config(org_id: int, db: Session) -> ApplicationFormConfig:
     """Get the form config for an org, creating with defaults if it doesn't exist."""
@@ -53,6 +57,7 @@ def get_application_form(
     current_user: User = Depends(get_current_user),
 ):
     """Get the full application form configuration for the current org."""
+    _require_email_verified(current_user)
     if not current_user.organization_id:
         raise HTTPException(status_code=400, detail="User must belong to an organization")
 
@@ -81,6 +86,7 @@ def update_form_config(
     current_user: User = Depends(get_current_user),
 ):
     """Update which default fields are shown/required on the application form."""
+    _require_email_verified(current_user)
     _require_admin(current_user)
     if not current_user.organization_id:
         raise HTTPException(status_code=400, detail="User must belong to an organization")
@@ -105,6 +111,7 @@ def create_custom_field(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new custom form field for the org's application form."""
+    _require_email_verified(current_user)
     _require_admin(current_user)
     if not current_user.organization_id:
         raise HTTPException(status_code=400, detail="User must belong to an organization")
@@ -153,6 +160,7 @@ def update_custom_field(
     current_user: User = Depends(get_current_user),
 ):
     """Update a custom form field."""
+    _require_email_verified(current_user)
     _require_admin(current_user)
 
     field = db.query(CustomFormField).filter(
@@ -195,6 +203,7 @@ def delete_custom_field(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a custom form field."""
+    _require_email_verified(current_user)
     _require_admin(current_user)
 
     field = db.query(CustomFormField).filter(
@@ -215,6 +224,7 @@ def reorder_custom_fields(
     current_user: User = Depends(get_current_user),
 ):
     """Reorder custom fields by providing an ordered list of field IDs."""
+    _require_email_verified(current_user)
     _require_admin(current_user)
 
     fields = (

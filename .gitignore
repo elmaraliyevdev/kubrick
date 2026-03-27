@@ -93,3 +93,5 @@ alembic/versions/__pycache__/
 kubrick-key-main.pem
 .claude/
 test-resumes/
+landing/
+deploy/EC2_COMMANDS.md

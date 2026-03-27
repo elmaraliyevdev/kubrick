@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import type { CandidateMatch } from "@/types/match";
 import { useState } from "react";
+import { MatchAnalysisDetails } from "./MatchAnalysisDetails";
 import { MatchScoreCard } from "./MatchScoreCard";
 
 interface RankedCandidatesListProps {
@@ -245,11 +246,14 @@ export function RankedCandidatesList({
                         </DialogTitle>
                       </DialogHeader>
                       {selectedCandidate && (
-                        <MatchScoreCard
-                          match={selectedCandidate.match}
-                          showDetails={true}
-                          size="lg"
-                        />
+                        <>
+                          <MatchScoreCard
+                            match={selectedCandidate.match}
+                            showDetails={true}
+                            size="lg"
+                          />
+                          <MatchAnalysisDetails match={selectedCandidate.match} />
+                        </>
                       )}
                     </DialogContent>
                   </Dialog>

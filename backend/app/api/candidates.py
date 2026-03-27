@@ -19,6 +19,19 @@ from app.core.validation import validate_search_query, validate_pagination_param
 router = APIRouter()
 
 
+def _normalize_candidate_certifications(candidate: Candidate) -> None:
+    """
+    Backward compatibility for older/seeded data where certifications were stored
+    as a list of strings instead of list[dict].
+    """
+    certs = candidate.certifications
+    if not isinstance(certs, list) or not certs:
+        return
+
+    if all(isinstance(c, str) for c in certs):
+        candidate.certifications = [{"name": c} for c in certs]
+
+
 @router.get("/", response_model=List[CandidateListResponse])
 def list_candidates(
         skip: int = Query(0, ge=0),
@@ -167,6 +180,7 @@ def create_candidate(
     db_candidate.resume_files_count = 0
     db_candidate.job_applications_count = 0
     db_candidate.latest_application_status = None
+    _normalize_candidate_certifications(db_candidate)
 
     return db_candidate
 
@@ -224,6 +238,7 @@ def get_candidate(
     else:
         candidate.latest_application_status = None
 
+    _normalize_candidate_certifications(candidate)
     return candidate
 
 
@@ -302,6 +317,7 @@ def update_candidate(
     else:
         db_candidate.latest_application_status = None
 
+    _normalize_candidate_certifications(db_candidate)
     return db_candidate
 
 

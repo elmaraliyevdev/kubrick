@@ -97,6 +97,14 @@ def complete_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Don't allow profile completion until the email is verified.
+    # This ensures the user can't bypass the UI-only redirect.
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Email must be verified before completing your profile",
+        )
+
     org = db.query(Organization).filter(
         Organization.name == payload.organization_name
     ).first()

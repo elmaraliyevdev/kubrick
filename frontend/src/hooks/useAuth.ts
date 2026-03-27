@@ -2,7 +2,7 @@ import type { RootState } from "@/store";
 import { loginSuccess, logout, setError, setUser } from "@/store/authSlice";
 import type { LoginCredentials, OTPRequest, OTPVerification, RegisterCredentials, User } from "@/types/auth";
 import api from "@/utils/api";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
@@ -28,6 +28,7 @@ function extractAxiosError(err: unknown, fallback: string): string {
 export const useAuth = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { token, user, isAuthenticated, isLoading, error } = useSelector(
     (state: RootState) => state.auth
   );
@@ -65,6 +66,9 @@ export const useAuth = () => {
       return res.data;
     },
     onSuccess: async (data) => {
+      // Prevent stale org-scoped data (e.g., candidates/jobs from a previous session).
+      queryClient.clear();
+
       // Mark as authenticated immediately so ProtectedRoute doesn't redirect
       dispatch(loginSuccess({}));
 
@@ -118,6 +122,9 @@ export const useAuth = () => {
       return res.data;
     },
     onSuccess: async (data) => {
+      // Prevent stale org-scoped data (e.g., candidates/jobs from a previous session).
+      queryClient.clear();
+
       // Mark as authenticated immediately
       dispatch(loginSuccess({}));
 
@@ -150,6 +157,7 @@ export const useAuth = () => {
     } catch {
       // Best-effort — clear client state even if backend call fails
     }
+    queryClient.clear();
     dispatch(logout());
     navigate("/login");
   };

@@ -9,6 +9,7 @@ export default function VerifyEmail() {
   const [code, setCode] = useState<string[]>(["", "", "", "", "", ""]);
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -19,7 +20,20 @@ export default function VerifyEmail() {
     }
     setEmail(pendingEmail);
     inputRefs.current[0]?.focus();
+    // A code was sent during registration; prevent immediate resend.
+    setResendCooldown(30);
   }, [navigate]);
+
+  // Resend cooldown timer (UX only; backend also rate-limits).
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+
+    const t = window.setInterval(() => {
+      setResendCooldown((s) => Math.max(0, s - 1));
+    }, 1000);
+
+    return () => window.clearInterval(t);
+  }, [resendCooldown]);
 
   const handleCodeChange = (index: number, value: string) => {
     if (value && !/^\d$/.test(value)) return;
@@ -52,7 +66,7 @@ export default function VerifyEmail() {
   };
 
   const handleResendCode = async () => {
-    if (!email || isResending) return;
+    if (!email || isResending || resendCooldown > 0) return;
     setIsResending(true);
     setResendSuccess(false);
     try {
@@ -64,6 +78,7 @@ export default function VerifyEmail() {
       if (res.ok) {
         setResendSuccess(true);
         setTimeout(() => setResendSuccess(false), 3000);
+        setResendCooldown(30);
       }
     } catch (error) {
       console.error("Failed to resend code:", error);
@@ -133,10 +148,14 @@ export default function VerifyEmail() {
           <span className="text-sm text-gray-500">Didn't receive a code? </span>
           <button
             onClick={handleResendCode}
-            disabled={isResending}
+            disabled={isResending || resendCooldown > 0}
             className="text-sm text-gray-900 hover:underline disabled:opacity-50"
           >
-            {isResending ? "Sending..." : "Resend code"}
+            {resendCooldown > 0
+              ? `Resend in ${Math.floor(resendCooldown / 60)}:${String(resendCooldown % 60).padStart(2, "0")}`
+              : isResending
+                ? "Sending..."
+                : "Resend code"}
           </button>
         </div>
 

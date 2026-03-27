@@ -1,6 +1,5 @@
 import {
   Briefcase,
-  Building2,
   Home,
   Settings2,
   Users,
@@ -9,9 +8,11 @@ import * as React from "react";
 
 import { NavMain } from "@/components/NavMain";
 import { NavUser } from "@/components/NavUser";
-import { TeamSwitcher } from "@/components/TeamSwitcher";
 import {
   Sidebar,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
@@ -71,19 +72,47 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     avatar: "",
   };
 
-  const teamsData = [
-    {
-      name: user?.organization?.name || "My Organization",
-      logo: Building2,
-      plan: "Pro",
-    },
-  ];
+  const organizationName = user?.organization?.name || "My Organization";
+  const orgInitial =
+    organizationName.trim().slice(0, 1).toUpperCase() || "O";
+
+  // backend serves uploaded org logos from `/uploads/*`
+  // and `VITE_API_URL` in dev typically ends with `/api`.
+  const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
+  const logoUrl = user?.organization?.logo_url;
+  const logoSrc = logoUrl ? `${apiBase}/${logoUrl}` : null;
+
+  const OrganizationHeader = (
+    <SidebarHeader>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="lg"
+            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          >
+            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
+              {logoSrc ? (
+                <img
+                  src={logoSrc}
+                  alt={organizationName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-sm font-semibold">{orgInitial}</span>
+              )}
+            </div>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold">{organizationName}</span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarHeader>
+  );
 
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={teamsData} />
-      </SidebarHeader>
+      {OrganizationHeader}
       <SidebarContent>
         <NavMain items={kubrickNavigation.navMain} />
       </SidebarContent>

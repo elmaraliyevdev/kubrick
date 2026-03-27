@@ -415,23 +415,134 @@ class MatchScoreCalculator:
             experience_score = 10.0
         
         # Relevant experience bonus (10 points max)
-        # Based on having work experience entries — no free points for missing data
+        # Based on title relevance and skill-years inferred from work history.
         work_experiences = candidate.get("work_experiences", [])
-        if work_experiences:
-            relevant_score = min(10.0, len(work_experiences) * 2.5)
+        job_title = (candidate.get("target_job_title") or "").lower().strip()
+        required_skills = [s for s in job_requirements.get("required_skills", []) if isinstance(s, str)]
+        primary_skills = [s for s in job_requirements.get("primary_skills", []) if isinstance(s, str)]
+
+        title_relevance = self._calculate_title_relevance(job_title, work_experiences) if work_experiences else 0.0
+        title_bonus = title_relevance * 6.0  # max 6 points
+
+        # Skill-years bonus based on primary + required skills
+        key_skills = list(dict.fromkeys(primary_skills + required_skills))[:8]
+        if key_skills and work_experiences:
+            skill_years = [self._estimate_skill_years(s, work_experiences) for s in key_skills]
+            avg_skill_years = sum(skill_years) / len(skill_years)
+            skill_years_bonus = min(4.0, avg_skill_years * 0.6)
         else:
-            relevant_score = 0.0
+            avg_skill_years = 0.0
+            skill_years_bonus = 0.0
+
+        relevant_score = min(10.0, title_bonus + skill_years_bonus)
         
         total_score = min(max_score, experience_score + relevant_score)
         
         analysis.update({
             "experience_subscore": experience_score,
             "relevant_subscore": relevant_score,
+            "title_relevance_ratio": round(title_relevance, 3),
+            "avg_key_skill_years": round(avg_skill_years, 2),
             "total_score": total_score,
             "meets_minimum": candidate_years >= (min_required or 0)
         })
         
         return total_score, analysis
+
+    def _calculate_title_relevance(self, job_title: str, work_experiences: List[Dict[str, Any]]) -> float:
+        """Return 0..1 relevance based on overlap between target job title and past titles."""
+        if not job_title or not work_experiences:
+            return 0.0
+
+        # keep meaningful tokens only
+        stop_tokens = {
+            "senior", "junior", "mid", "lead", "principal", "staff",
+            "engineer", "developer", "specialist", "associate", "manager",
+            "intern", "sr", "jr",
+        }
+        target_tokens = {t for t in re.findall(r"[a-zA-Z\+#\.]{2,}", job_title.lower()) if t not in stop_tokens}
+        if not target_tokens:
+            target_tokens = set(re.findall(r"[a-zA-Z\+#\.]{2,}", job_title.lower()))
+        if not target_tokens:
+            return 0.0
+
+        best = 0.0
+        for exp in work_experiences:
+            title = str(exp.get("job_title") or "").lower()
+            if not title:
+                continue
+            exp_tokens = set(re.findall(r"[a-zA-Z\+#\.]{2,}", title))
+            if not exp_tokens:
+                continue
+
+            overlap = len(target_tokens.intersection(exp_tokens))
+            ratio = overlap / max(1, len(target_tokens))
+            best = max(best, ratio)
+
+        return min(1.0, best)
+
+    def _estimate_skill_years(self, skill: str, work_experiences: List[Dict[str, Any]]) -> float:
+        """Estimate years of skill usage from work history date ranges and text mentions."""
+        if not skill or not work_experiences:
+            return 0.0
+
+        skill_norm = skill.lower().strip()
+        synonyms = set(self.normalize_skills([skill_norm]))
+
+        total_years = 0.0
+        for exp in work_experiences:
+            title = str(exp.get("job_title") or "").lower()
+            desc = str(exp.get("description") or "").lower()
+            resp = str(exp.get("responsibilities") or "").lower()
+            combined = f"{title} {desc} {resp}"
+
+            if not any(
+                syn in combined or self._is_containment_match(syn, combined)
+                for syn in synonyms
+            ):
+                continue
+
+            years = self._estimate_experience_duration_years(exp)
+            total_years += years
+
+        return min(20.0, total_years)
+
+    def _estimate_experience_duration_years(self, exp: Dict[str, Any]) -> float:
+        """Estimate duration in years from start/end/duration fields."""
+        start = str(exp.get("start_date") or "").strip()
+        end = str(exp.get("end_date") or "").strip()
+        duration = str(exp.get("duration") or "").strip().lower()
+
+        # Try YYYY-MM style dates first
+        if start:
+            start_m = re.match(r"^(\d{4})(?:-(\d{1,2}))?", start)
+            if start_m:
+                sy = int(start_m.group(1))
+                sm = int(start_m.group(2) or 1)
+                if end.lower() == "present":
+                    ey, em = datetime.utcnow().year, datetime.utcnow().month
+                else:
+                    end_m = re.match(r"^(\d{4})(?:-(\d{1,2}))?", end)
+                    if end_m:
+                        ey = int(end_m.group(1))
+                        em = int(end_m.group(2) or 1)
+                    else:
+                        ey, em = datetime.utcnow().year, datetime.utcnow().month
+                months = max(1, (ey - sy) * 12 + (em - sm))
+                return min(30.0, months / 12.0)
+
+        # Fallback: parse textual duration ("3 years 6 months")
+        years = 0.0
+        y = re.search(r"(\d+(?:\.\d+)?)\s*year", duration)
+        m = re.search(r"(\d+(?:\.\d+)?)\s*month", duration)
+        if y:
+            years += float(y.group(1))
+        if m:
+            years += float(m.group(1)) / 12.0
+        if years > 0:
+            return min(30.0, years)
+
+        return 1.0
 
     def calculate_education_score(self, job_requirements: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
         """Calculate education match score (0-15 points)"""
@@ -687,6 +798,9 @@ class MatchScoreCalculator:
 
     def calculate_overall_match_score(self, job_requirements: Dict[str, Any], candidate: Dict[str, Any], job_data: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate complete match score with detailed breakdown"""
+        # Pass contextual title to experience scoring logic
+        candidate = dict(candidate)
+        candidate["target_job_title"] = job_data.get("title", "")
         
         # Calculate each component score
         skills_score, skills_analysis = self.calculate_skills_score(job_requirements, candidate)
@@ -701,7 +815,28 @@ class MatchScoreCalculator:
 
         # Apply primary skills penalty multiplier
         primary_multiplier, primary_analysis = self.calculate_primary_skills_multiplier(job_requirements, candidate)
-        overall_score = raw_score * primary_multiplier
+
+        # Additional required-skill coverage penalty so critical misses don't rank unrealistically high.
+        req_total = skills_analysis.get("match_counts", {}).get("required_total", 0) or 0
+        req_matched = skills_analysis.get("match_counts", {}).get("required_matched", 0) or 0
+        required_ratio = (req_matched / req_total) if req_total else 1.0
+        if required_ratio >= 0.9:
+            required_multiplier = 1.0
+        elif required_ratio >= 0.75:
+            required_multiplier = 0.9
+        elif required_ratio >= 0.6:
+            required_multiplier = 0.8
+        else:
+            required_multiplier = 0.65
+
+        # Role-specific hard penalty for DevOps/infra roles missing core automation skills
+        role_title = str(job_data.get("title") or "").lower()
+        missing_required = [s.lower() for s in skills_analysis.get("missing_required", [])]
+        critical_devops_skills = {"ci/cd", "kubernetes", "docker", "terraform", "aws"}
+        critical_missing = sorted(list(critical_devops_skills.intersection(set(missing_required))))
+        critical_multiplier = 0.8 if ("devops" in role_title and critical_missing) else 1.0
+
+        overall_score = raw_score * primary_multiplier * required_multiplier * critical_multiplier
 
         # Determine tier
         if overall_score >= 80:
@@ -724,7 +859,9 @@ class MatchScoreCalculator:
                 "education": round(education_score, 2),
                 "additional": round(additional_score, 2),
                 "raw_score": round(raw_score, 2),
-                "primary_skills_multiplier": round(primary_multiplier, 2)
+                "primary_skills_multiplier": round(primary_multiplier, 2),
+                "required_coverage_multiplier": round(required_multiplier, 2),
+                "critical_skill_multiplier": round(critical_multiplier, 2),
             },
             "detailed_analysis": {
                 "skills": skills_analysis,
@@ -739,10 +876,12 @@ class MatchScoreCalculator:
                 "skills_extra": len(skills_analysis.get("extra_skills", [])),
                 "meets_experience": experience_analysis.get("meets_minimum", False),
                 "education_level": education_analysis.get("candidate_highest_level", 0),
-                "primary_skills_missing": primary_analysis.get("missing", [])
+                "primary_skills_missing": primary_analysis.get("missing", []),
+                "required_skills_ratio": round(required_ratio, 3),
+                "critical_missing_skills": critical_missing,
             },
             "calculation_metadata": {
-                "algorithm_version": "1.1",
+                "algorithm_version": "1.2",
                 "config_used": self.config,
                 "calculated_at": datetime.utcnow().isoformat()
             }

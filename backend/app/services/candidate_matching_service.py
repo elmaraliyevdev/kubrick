@@ -138,6 +138,10 @@ class CandidateMatchingService:
                         "company_name": getattr(exp, "company_name", None),
                         "location": getattr(exp, "location", None),
                         "duration": getattr(exp, "duration", None),
+                        "start_date": getattr(exp, "start_date", None),
+                        "end_date": getattr(exp, "end_date", None),
+                        "description": getattr(exp, "description", None),
+                        "responsibilities": getattr(exp, "responsibilities", None),
                     }
                     for exp in (candidate.work_experiences or [])
                 ],
