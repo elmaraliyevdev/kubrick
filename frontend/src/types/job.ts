@@ -13,6 +13,7 @@ export interface Job {
   work_arrangement: 'remote_only' | 'remote_possible' | 'hybrid' | 'onsite' | 'relocation_required'
   status: 'open' | 'closed' | 'draft'
   category?: string
+  experience_level?: 'junior' | 'mid' | 'senior' | 'lead' | null
   user_id: number
   organization_id: number
   organization?: {
@@ -38,6 +39,7 @@ export interface JobCreate {
   work_arrangement?: string
   status?: string
   category?: string
+  experience_level?: string | null
 }
 
 export interface JobUpdate {
@@ -53,4 +55,5 @@ export interface JobUpdate {
   work_arrangement?: string
   status?: string
   category?: string
+  experience_level?: string | null
 }

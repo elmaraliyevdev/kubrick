@@ -9,6 +9,7 @@ import JobDetail from "@/pages/JobDetail";
 import Jobs from "@/pages/Jobs";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/NewDashboard";
+import Pipeline from "@/pages/Pipeline";
 import NotFound from "@/pages/NotFound";
 import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
@@ -51,6 +52,7 @@ export default function MainApp() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="jobs" element={<Jobs />} />
           <Route path="jobs/:jobId" element={<JobDetail />} />
+          <Route path="pipeline" element={<Pipeline />} />
           <Route path="candidates" element={<Candidates />} />
           <Route path="candidates/:candidateId" element={<CandidateDetail />} />
           <Route path="settings/profile" element={<SettingsProfile />} />

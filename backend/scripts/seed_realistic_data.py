@@ -144,8 +144,6 @@ def realistic_jobs() -> list[dict[str, Any]]:
             "employment_type": "full_time",
             "work_arrangement": "hybrid",
             "experience_level": "senior",
-            "salary_min": 60000,
-            "salary_max": 92000,
             "min_exp": 4,
             "max_exp": 10,
         },
@@ -161,8 +159,6 @@ def realistic_jobs() -> list[dict[str, Any]]:
             "employment_type": "full_time",
             "work_arrangement": "remote_only",
             "experience_level": "mid",
-            "salary_min": 48000,
-            "salary_max": 76000,
             "min_exp": 3,
             "max_exp": 8,
         },
@@ -178,8 +174,6 @@ def realistic_jobs() -> list[dict[str, Any]]:
             "employment_type": "contract",
             "work_arrangement": "remote_possible",
             "experience_level": "mid",
-            "salary_min": 26000,
-            "salary_max": 45000,
             "min_exp": 3,
             "max_exp": 7,
         },
@@ -195,8 +189,6 @@ def realistic_jobs() -> list[dict[str, Any]]:
             "employment_type": "full_time",
             "work_arrangement": "onsite",
             "experience_level": "mid",
-            "salary_min": 30000,
-            "salary_max": 55000,
             "min_exp": 2,
             "max_exp": 7,
         },
@@ -212,8 +204,6 @@ def realistic_jobs() -> list[dict[str, Any]]:
             "employment_type": "full_time",
             "work_arrangement": "hybrid",
             "experience_level": "senior",
-            "salary_min": 58000,
-            "salary_max": 95000,
             "min_exp": 4,
             "max_exp": 10,
         },
@@ -263,8 +253,6 @@ def realistic_jobs() -> list[dict[str, Any]]:
                 "employment_type": tpl["employment_type"],
                 "work_arrangement": tpl["work_arrangement"],
                 "status": "open" if i < 16 else ("draft" if i < 18 else "closed"),
-                "salary_min": tpl["salary_min"] + (i % 4) * 1500,
-                "salary_max": tpl["salary_max"] + (i % 4) * 2200,
                 "experience_level": tpl["experience_level"],
                 "description": description,
                 "responsibilities": responsibilities,
@@ -420,8 +408,6 @@ def create_jobs(db, org: Organization, owner_id: int) -> list[Job]:
             nice_to_have=seed["nice_to_have"],
             benefits=seed["benefits"],
             experience_level=seed["experience_level"],
-            salary_min=seed["salary_min"],
-            salary_max=seed["salary_max"],
             skills_required=", ".join(seed["required_skills"]),
             category=seed["category"],
             work_arrangement=seed["work_arrangement"],
@@ -530,7 +516,8 @@ def pick_scores(matched: int, missing: int) -> tuple[Decimal, Decimal, Decimal, 
 
 
 def create_applications_and_matches(db, jobs: list[Job], candidates: list[Candidate]) -> None:
-    statuses = ["new", "reviewed", "shortlisted", "interviewed"]
+    # Candidate pipeline lanes (v1)
+    statuses = ["applied", "screening", "interview", "offer", "hired"]
     now = datetime.utcnow()
 
     for job in jobs:

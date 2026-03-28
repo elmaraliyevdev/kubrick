@@ -1,10 +1,17 @@
-from sqlalchemy import Column, Integer, Enum, Text, ForeignKey, DateTime, func, JSON
+from sqlalchemy import Column, Integer, Enum, Text, ForeignKey, DateTime, func, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
 
 class JobApplication(Base):
     __tablename__ = "job_applications"
+
+    __table_args__ = (
+        # Prevent creating multiple applications for the same candidate/job pair.
+        UniqueConstraint("candidate_id", "job_id", name="uq_job_applications_candidate_job"),
+        # Speeds up pipeline reads and stage counters.
+        Index("ix_job_applications_job_status_updated_at", "job_id", "status", "updated_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -28,8 +35,8 @@ class JobApplication(Base):
 
     # Application status
     status = Column(
-        Enum("new", "reviewed", "shortlisted", "interviewed", "rejected", "hired", name="application_status"),
-        default="new",
+        Enum("applied", "screening", "interview", "offer", "hired", name="application_status"),
+        default="applied",
         nullable=False,
         index=True,  # Index for status filtering
     )

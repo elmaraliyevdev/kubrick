@@ -47,11 +47,10 @@ export interface Candidate {
   resume_files_count: number;
   job_applications_count: number;
   latest_application_status?:
-    | "new"
-    | "reviewed"
-    | "shortlisted"
-    | "interviewed"
-    | "rejected"
+    | "applied"
+    | "screening"
+    | "interview"
+    | "offer"
     | "hired";
 }
 
@@ -69,11 +68,10 @@ export interface CandidateListItem {
   resume_files_count: number;
   job_applications_count: number;
   latest_application_status?:
-    | "new"
-    | "reviewed"
-    | "shortlisted"
-    | "interviewed"
-    | "rejected"
+    | "applied"
+    | "screening"
+    | "interview"
+    | "offer"
     | "hired";
 }
 

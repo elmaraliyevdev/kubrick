@@ -1,27 +1,70 @@
 import { CalculateMatchesButton } from "@/components/CalculateMatchesButton";
 import { JobDrawer } from "@/components/JobDrawer";
 import { RankedCandidatesList } from "@/components/RankedCandidatesList";
-import { useJob } from "@/hooks/useJobs";
+import { PipelineBoard } from "@/components/PipelineBoard";
+import { SegmentedTabs } from "@/components/SegmentedTabs";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useDeleteJob, useJob } from "@/hooks/useJobs";
 import { matchesApi } from "@/services/matches";
 import type { CandidateMatch, MatchCalculationResult } from "@/types/match";
-import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { IconTrash } from "@tabler/icons-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
+
+type JobTab = "details" | "matches" | "pipeline" | "applicants" | "statistics";
+
+function formatEnumLabel(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function MetaItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1 min-w-0">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <div className="text-sm text-gray-900 break-words">{children}</div>
+    </div>
+  );
+}
+
+function BulletSection({ title, items }: { title: string; items: string[] | undefined }) {
+  const cleaned = (items || []).map((s) => s?.trim()).filter(Boolean) as string[];
+  if (!cleaned.length) return null;
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-3">{title}</h2>
+      <ul className="list-disc space-y-2 pl-5 text-sm text-gray-700 leading-relaxed">
+        {cleaned.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export default function JobDetail() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const { data: job, isLoading, error } = useJob(parseInt(jobId || "0"));
+  const deleteJobMutation = useDeleteJob();
 
   // AI Matching state
   const [rankedCandidates, setRankedCandidates] = useState<CandidateMatch[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
-  const [activeTab, setActiveTab] = useState<"details" | "matches">("details");
+  const [activeTab, setActiveTab] = useState<JobTab>("details");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [primarySkills, setPrimarySkills] = useState<string[]>([]);
   const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
   const [niceToHaveSkills, setNiceToHaveSkills] = useState<string[]>([]);
-  const [isReparsing, setIsReparsing] = useState(false);
 
   const loadRankedCandidates = useCallback(async () => {
     if (!job?.id) return;
@@ -66,19 +109,6 @@ export default function JobDetail() {
     loadRequirements();
   }, [loadRequirements]);
 
-  const handleReparseSkills = async () => {
-    if (!job?.id) return;
-    try {
-      setIsReparsing(true);
-      await matchesApi.parseJobRequirements(job.id, true);
-      await loadRequirements();
-    } catch (err) {
-      console.error("Error re-parsing skills:", err);
-    } finally {
-      setIsReparsing(false);
-    }
-  };
-
   const handleCalculationComplete = (result: MatchCalculationResult) => {
     console.log("Match calculation complete:", result);
     loadRankedCandidates();
@@ -98,6 +128,19 @@ export default function JobDetail() {
       year: "numeric",
       month: "long",
       day: "numeric",
+    });
+  };
+
+  const handleConfirmRemoveJob = () => {
+    if (!job) return;
+    deleteJobMutation.mutate(job.id, {
+      onSuccess: () => {
+        setRemoveDialogOpen(false);
+        navigate("/jobs");
+      },
+      onError: () => {
+        toast.error("Could not remove this job.");
+      },
     });
   };
 
@@ -133,116 +176,110 @@ export default function JobDetail() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium text-gray-900">{job.title}</h1>
-          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs capitalize">
-            {job.status}
-          </span>
-        </div>
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="border border-gray-200 text-gray-700 rounded-md h-9 px-4 text-sm hover:bg-gray-50"
-        >
-          Edit Job
-        </button>
-      </div>
-
-      {/* Metadata */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Location</span>
-          <span className="text-gray-900">{job.location || "Not specified"}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Employment Type</span>
-          <span className="text-gray-900 capitalize">{job.employment_type.replace("_", " ")}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Work Arrangement</span>
-          <span className="text-gray-900 capitalize">{job.work_arrangement.replace("_", " ")}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Posted</span>
-          <span className="text-gray-900">{formatDate(job.created_at)}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Organization</span>
-          <span className="text-gray-900">{job.organization?.name}</span>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-6 border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab("details")}
-            className={`pb-2 text-sm ${
-              activeTab === "details"
-                ? "text-gray-900 border-b-2 border-gray-900"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Job Details
-          </button>
-          <button
-            onClick={() => setActiveTab("matches")}
-            className={`pb-2 text-sm ${
-              activeTab === "matches"
-                ? "text-gray-900 border-b-2 border-gray-900"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            AI Matches {rankedCandidates.length > 0 && `(${rankedCandidates.length})`}
-          </button>
-        </div>
-
-        <CalculateMatchesButton
-          jobId={job.id}
-          onCalculationComplete={handleCalculationComplete}
-          variant="default"
+    <div className="p-6">
+      {/* Tabs at top — minimal style */}
+      <div className="mb-6">
+        <SegmentedTabs<JobTab>
+          variant="minimal"
+          value={activeTab}
+          onValueChange={setActiveTab}
+          items={[
+            { value: "details", label: "Details" },
+            { value: "matches", label: "Matching", count: rankedCandidates.length },
+            { value: "pipeline", label: "Pipeline" },
+            { value: "applicants", label: "Applicants", disabled: true },
+            { value: "statistics", label: "Statistics", disabled: true },
+          ]}
         />
       </div>
 
       {/* Tab content */}
       {activeTab === "details" && (
         <div className="space-y-6">
-          {/* Description */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="text-sm font-medium text-gray-900 mb-4">Description</h2>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{job.description}</p>
-          </div>
-
-          {/* Skills */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-gray-900">Skills</h2>
-              <button
-                onClick={handleReparseSkills}
-                disabled={isReparsing}
-                className="border border-gray-200 text-gray-700 rounded-md h-9 px-4 text-sm hover:bg-gray-50 disabled:opacity-50"
-              >
-                {isReparsing ? (
-                  <span className="flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Re-parsing...
+          {/* Summary */}
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 space-y-2">
+                <h1 className="text-xl font-semibold tracking-tight text-gray-900">{job.title}</h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium capitalize text-gray-800">
+                    {job.status}
                   </span>
-                ) : (
-                  "Re-parse"
-                )}
-              </button>
+                  {job.category ? (
+                    <span className="inline-flex rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-700">
+                      {job.category}
+                    </span>
+                  ) : null}
+                  <span className="inline-flex rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs tabular-nums text-gray-600">
+                    {job.candidate_count} application{job.candidate_count === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(true)}
+                  className="h-9 rounded-md border border-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  Edit job
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRemoveDialogOpen(true)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-50"
+                  aria-label="Remove job"
+                >
+                  <IconTrash className="size-5" stroke={1.5} />
+                </button>
+              </div>
             </div>
+
+            <div className="mt-6 grid gap-x-8 gap-y-5 border-t border-gray-100 pt-6 sm:grid-cols-2 lg:grid-cols-3">
+              <MetaItem label="Location">{job.location?.trim() ? job.location : "Not specified"}</MetaItem>
+              <MetaItem label="Employment type">{formatEnumLabel(job.employment_type)}</MetaItem>
+              <MetaItem label="Work arrangement">{formatEnumLabel(job.work_arrangement)}</MetaItem>
+              {job.experience_level ? (
+                <MetaItem label="Experience level">{formatEnumLabel(job.experience_level)}</MetaItem>
+              ) : (
+                <MetaItem label="Experience level">
+                  <span className="text-gray-500">Not set</span>
+                </MetaItem>
+              )}
+              <MetaItem label="Posted">{formatDate(job.created_at)}</MetaItem>
+              <MetaItem label="Last updated">{formatDate(job.updated_at)}</MetaItem>
+            </div>
+          </section>
+
+          {/* Description */}
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-3">
+              Description
+            </h2>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{job.description}</p>
+          </section>
+
+          <BulletSection title="Responsibilities" items={job.responsibilities} />
+          <BulletSection title="Requirements" items={job.requirements} />
+          <BulletSection title="Nice to have" items={job.nice_to_have} />
+          <BulletSection title="Benefits" items={job.benefits} />
+
+          {/* Parsed skills for matching (from requirements parser) */}
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
+              Skills for matching
+            </h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Extracted for AI ranking. Job bullet lists above are shown separately.
+            </p>
 
             {primarySkills.length > 0 && (
               <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">Primary</p>
+                <p className="text-xs font-medium text-gray-600 mb-2">Primary</p>
                 <div className="flex flex-wrap gap-2">
                   {primarySkills.map((skill) => (
                     <span
                       key={skill}
-                      className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                      className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-800"
                     >
                       {skill}
                     </span>
@@ -253,12 +290,12 @@ export default function JobDetail() {
 
             {requiredSkills.length > 0 && (
               <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">Required</p>
+                <p className="text-xs font-medium text-gray-600 mb-2">Required</p>
                 <div className="flex flex-wrap gap-2">
                   {requiredSkills.map((skill) => (
                     <span
                       key={skill}
-                      className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                      className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-800"
                     >
                       {skill}
                     </span>
@@ -269,12 +306,12 @@ export default function JobDetail() {
 
             {niceToHaveSkills.length > 0 && (
               <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">Nice to Have</p>
+                <p className="text-xs font-medium text-gray-600 mb-2">Nice to have</p>
                 <div className="flex flex-wrap gap-2">
                   {niceToHaveSkills.map((skill) => (
                     <span
                       key={skill}
-                      className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                      className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-800"
                     >
                       {skill}
                     </span>
@@ -287,18 +324,27 @@ export default function JobDetail() {
               !niceToHaveSkills.length &&
               !primarySkills.length &&
               (job.skills_required ? (
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{job.skills_required}</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {job.skills_required}
+                </p>
               ) : (
                 <p className="text-sm text-gray-500">
-                  Click "Re-parse" to extract skills from the job description.
+                  No parsed skills yet. Run match calculation or parse requirements to populate this section.
                 </p>
               ))}
-          </div>
+          </section>
         </div>
       )}
 
       {activeTab === "matches" && (
-        <div>
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <CalculateMatchesButton
+              jobId={job.id}
+              onCalculationComplete={handleCalculationComplete}
+              variant="default"
+            />
+          </div>
           {isLoadingMatches ? (
             <div className="animate-pulse space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -322,7 +368,37 @@ export default function JobDetail() {
         </div>
       )}
 
+      {activeTab === "pipeline" && (
+        <div>
+          <PipelineBoard jobId={job.id} />
+        </div>
+      )}
+
       <JobDrawer open={drawerOpen} onOpenChange={setDrawerOpen} job={job} mode="edit" />
+
+      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove job?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove this job? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setRemoveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteJobMutation.isPending}
+              onClick={handleConfirmRemoveJob}
+            >
+              {deleteJobMutation.isPending ? "Removing…" : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

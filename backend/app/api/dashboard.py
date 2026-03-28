@@ -54,10 +54,10 @@ def get_dashboard_stats(
         JobApplication.created_at < seven_days_ago,
     ).scalar() or 0
 
-    # 3. Candidates to review (applications with status "new")
+    # 3. Candidates to review (applications with status "applied")
     candidates_to_review = db.query(func.count(JobApplication.id)).filter(
         JobApplication.job_id.in_(org_job_ids),
-        JobApplication.status == "new",
+        JobApplication.status == "applied",
     ).scalar() or 0
 
     # 4. Top match score across org

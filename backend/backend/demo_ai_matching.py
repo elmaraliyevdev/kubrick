@@ -114,8 +114,6 @@ This is a full-time, remote-friendly position with competitive salary and benefi
                 "experience_level": "senior",
                 "work_arrangement": "hybrid",
                 "location": "San Francisco, CA",
-                "salary_min": 120000,
-                "salary_max": 160000,
                 "skills_required": "React, Node.js, TypeScript, PostgreSQL, AWS, Docker, REST APIs, microservices, Jest, Cypress, CI/CD",
                 "status": "open"
             },
@@ -152,8 +150,6 @@ You will work on:
                 "experience_level": "senior",
                 "work_arrangement": "remote",
                 "location": "Remote",
-                "salary_min": 140000,
-                "salary_max": 200000,
                 "skills_required": "Python, scikit-learn, TensorFlow, PyTorch, SQL, Spark, Hadoop, statistics, deep learning, NLP, A/B testing, MLOps",
                 "status": "open"
             },
@@ -191,8 +187,6 @@ Responsibilities:
                 "experience_level": "mid",
                 "work_arrangement": "hybrid", 
                 "location": "San Francisco, CA",
-                "salary_min": 100000,
-                "salary_max": 140000,
                 "skills_required": "product management, B2B SaaS, analytics, agile, Mixpanel, user research, SaaS metrics, Jira, stakeholder management",
                 "status": "open"
             },
@@ -230,8 +224,6 @@ You'll be responsible for:
                 "experience_level": "mid", 
                 "work_arrangement": "remote",
                 "location": "Remote",
-                "salary_min": 110000,
-                "salary_max": 150000,
                 "skills_required": "AWS, Terraform, Docker, Kubernetes, CI/CD, Linux, Prometheus, Grafana, Python, Bash, Jenkins, monitoring",
                 "status": "open"
             }
@@ -245,8 +237,6 @@ You'll be responsible for:
                 experience_level=job_info["experience_level"], 
                 work_arrangement=job_info["work_arrangement"],
                 location=job_info["location"],
-                salary_min=job_info["salary_min"],
-                salary_max=job_info["salary_max"],
                 skills_required=job_info["skills_required"],
                 status=job_info["status"],
                 organization_id=self.org_id,

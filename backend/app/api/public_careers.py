@@ -353,7 +353,7 @@ async def apply_to_job(
     application = JobApplication(
         job_id=job.id,
         candidate_id=candidate.id,
-        status="new",
+        status="applied",
         cover_letter=form_data.cover_letter,
         custom_field_responses=custom_field_responses,
     )

@@ -51,7 +51,7 @@ class TestDashboardStats:
         db_session.flush()
 
         application = JobApplication(
-            job_id=job.id, candidate_id=candidate.id, status="new",
+            job_id=job.id, candidate_id=candidate.id, status="applied",
         )
         db_session.add(application)
         db_session.commit()

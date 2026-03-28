@@ -154,8 +154,6 @@ class CandidateMatchingService:
                 "employment_type": job.employment_type or "full_time",
                 "experience_level": job.experience_level or "mid",
                 "work_arrangement": job.work_arrangement or "onsite",
-                "salary_min": job.salary_min,
-                "salary_max": job.salary_max
             }
             
             # Calculate match score

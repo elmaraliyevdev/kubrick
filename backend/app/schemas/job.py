@@ -17,6 +17,7 @@ class JobBase(BaseModel):
     work_arrangement: str = "onsite"
     status: str = "open"
     category: Optional[str] = None
+    experience_level: Optional[str] = None
 
 
 class JobCreate(JobBase):
@@ -36,6 +37,7 @@ class JobUpdate(BaseModel):
     work_arrangement: Optional[str] = None
     status: Optional[str] = None
     category: Optional[str] = None
+    experience_level: Optional[str] = None
 
 
 class JobResponse(JobBase):
