@@ -11,7 +11,7 @@ import logging
 from app.db.models.work_experience import WorkExperience
 from app.db.models.candidate import Candidate
 from app.db.models.candidate_file import CandidateFile
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.db.models.user import User
 from app.services.llm_resume_parser import LLMResumeParser, RegexResumeParser, ParsingConfig
 
@@ -129,7 +129,7 @@ ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.doc', '.txt'}
 def download_file(
     file_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Download a resume file by its ID"""
     candidate_file = (
@@ -211,15 +211,9 @@ def save_work_experience(candidate_id: int, work_experiences: List[dict], db: Se
 async def upload_resume_create_candidate(
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Upload a resume and automatically create a new candidate"""
-
-    if not current_user.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User must be part of an organization to create candidates"
-        )
 
     # Validate file
     if not file.filename:
@@ -413,7 +407,7 @@ async def upload_resume(
         candidate_id: int,
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Upload and parse a resume for an existing candidate"""
 
@@ -598,7 +592,7 @@ async def bulk_upload_resumes(
         files: List[UploadFile] = File(...),
         auto_create_candidates: bool = Form(default=True),
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Bulk upload resumes and optionally auto-create candidates"""
 

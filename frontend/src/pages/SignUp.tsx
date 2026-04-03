@@ -10,9 +10,15 @@ export default function SignUp() {
 
   const { register, isRegisterLoading, error } = useAuth();
 
+  const fullNameOk = fullName.trim().length > 0;
+  const emailOk = email.trim().length > 0;
+  const passwordOk = password.length >= 8;
+  const canCreateAccount =
+    fullNameOk && emailOk && passwordOk && termsAccepted && !isRegisterLoading;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!termsAccepted) return;
+    if (!canCreateAccount) return;
 
     register({
       email,
@@ -103,7 +109,7 @@ export default function SignUp() {
 
           <button
             type="submit"
-            disabled={isRegisterLoading || !termsAccepted}
+            disabled={!canCreateAccount}
             className="w-full h-10 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRegisterLoading ? "Creating account..." : "Create account"}

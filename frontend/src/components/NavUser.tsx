@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { BadgeCheck, ChevronsUpDown, CreditCard, LogOut, Sparkles, User } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -13,7 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
-import { useSidebar } from "@/hooks/UseSidebar";
 
 export function NavUser({
   user,
@@ -24,7 +24,7 @@ export function NavUser({
     avatar: string;
   };
 }) {
-  const { isMobile } = useSidebar();
+  const isMobile = useIsMobile();
   const { logout } = useAuth();
 
   const handleLogout = () => {

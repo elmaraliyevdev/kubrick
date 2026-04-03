@@ -41,10 +41,13 @@ export interface User {
   organization?: Organization | null;
 }
 
+/** Session truth: only `"authenticated"` after a validated session (e.g. `/auth/me` or post-login `setUser`). */
+export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";
+
 export interface AuthState {
   token: string | null;
   user: User | null;
-  isAuthenticated: boolean;
+  authStatus: AuthStatus;
   isLoading: boolean;
   error: string | null;
 }

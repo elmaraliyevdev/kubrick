@@ -9,7 +9,7 @@ from app.db.models.job import Job
 from app.db.models.job_requirement import JobRequirement
 from app.db.models.job_application import JobApplication
 from app.schemas.job import JobCreate, JobResponse, JobUpdate
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.db.models.user import User
 from app.services.job_description_parser import JobDescriptionParser
 from app.services.candidate_matching_service import CandidateMatchingService
@@ -19,15 +19,9 @@ router = APIRouter()
 @router.get("/", response_model=List[JobResponse])
 def list_jobs(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """List all jobs for the current user's organization"""
-    if not current_user.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User must be part of an organization to view jobs"
-        )
-    
     jobs = (
         db.query(Job)
         .options(joinedload(Job.organization))
@@ -57,15 +51,9 @@ def list_jobs(
 def create_job(
     job: JobCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Create a new job posting"""
-    if not current_user.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User must be part of an organization to create jobs"
-        )
-    
     from app.utils.slug import generate_job_slug
     db_job = Job(
         title=job.title,
@@ -103,7 +91,7 @@ def create_job(
 def get_job(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Get a specific job by ID"""
     job = (
@@ -130,7 +118,7 @@ def update_job(
     job_id: int,
     job_update: JobUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Update a job posting"""
     db_job = (
@@ -175,7 +163,7 @@ def update_job(
 def delete_job(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Delete a job posting"""
     db_job = (
@@ -209,7 +197,7 @@ async def parse_job_requirements(
     job_id: int,
     force_reparse: bool = False,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Parse job description and extract structured requirements"""
     # Get the job
@@ -323,7 +311,7 @@ async def parse_job_requirements(
 def get_job_requirements(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Get parsed job requirements"""
     # Verify job exists and belongs to user's organization
@@ -386,7 +374,7 @@ def update_job_requirements(
     job_id: int,
     requirements_update: Dict[str, Any],
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Manually update job requirements"""
     # Verify job exists and belongs to user's organization
@@ -462,7 +450,7 @@ async def calculate_job_matches(
     candidate_ids: Optional[List[int]] = None,
     force_recalculate: bool = False,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Calculate AI match scores for candidates against a job"""
     
@@ -517,7 +505,7 @@ def get_ranked_candidates(
     offset: int = 0,
     min_score: Optional[float] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Get candidates ranked by AI match score for a job"""
     
@@ -567,7 +555,7 @@ def get_ranked_candidates(
 async def bulk_recalculate_scores(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Recalculate all match scores for a job (after job changes)"""
     

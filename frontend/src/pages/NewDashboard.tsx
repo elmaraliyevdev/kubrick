@@ -42,12 +42,12 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-8">
-        <div className="h-6 w-48 bg-gray-100 rounded" />
+        <div className="h-6 w-48 rounded bg-muted animate-pulse" />
         <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className="h-32 bg-gray-50 border border-gray-200 rounded-xl animate-pulse"
+              className="h-32 animate-pulse rounded-lg border border-border bg-muted/40"
             />
           ))}
         </div>
@@ -62,14 +62,14 @@ export default function Dashboard() {
     <div className="p-6 space-y-8">
       {/* Welcome */}
       <div>
-        <p className="text-lg font-medium text-gray-900">
+        <p className="text-lg font-medium text-foreground">
           Welcome back, {user?.first_name || "User"}
         </p>
-        <p className="text-sm text-gray-500 mt-1">Here's an overview of your hiring pipeline.</p>
+        <p className="text-sm text-muted-foreground mt-1">Here's an overview of your hiring pipeline.</p>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
         {/* Open Positions */}
         <Card className="@container/card">
           <CardHeader>
@@ -172,34 +172,34 @@ export default function Dashboard() {
 
       {/* Recent Candidates */}
       <div>
-        <p className="text-sm font-medium text-gray-900 mb-4">Recent candidates</p>
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
+        <p className="text-sm font-medium text-foreground mb-4">Recent candidates</p>
+        <div className="rounded-lg bg-card p-6 text-card-foreground ring-1 ring-foreground/10">
           {candidatesLoading ? (
-            <p className="text-sm text-gray-400">Loading...</p>
+            <p className="text-sm text-muted-foreground">Loading...</p>
           ) : recentCandidates && recentCandidates.length > 0 ? (
             <div>
               {recentCandidates.map((candidate, idx) => (
                 <div
                   key={candidate.id}
                   onClick={() => navigate(`/candidates/${candidate.id}`)}
-                  className={`flex items-center justify-between py-3 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded ${
-                    idx < recentCandidates.length - 1 ? "border-b border-gray-100" : ""
+                  className={`flex items-center justify-between py-3 cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded ${
+                    idx < recentCandidates.length - 1 ? "border-b border-border" : ""
                   }`}
                 >
                   <div className="flex items-center gap-6">
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm text-foreground">
                       {candidate.first_name} {candidate.last_name}
                     </span>
-                    <span className="text-sm text-gray-500">{candidate.email}</span>
+                    <span className="text-sm text-muted-foreground">{candidate.email}</span>
                   </div>
-                  <span className="text-sm text-gray-400">
+                  <span className="text-sm text-muted-foreground">
                     {new Date(candidate.created_at).toLocaleDateString()}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400">No recent candidates</p>
+            <p className="text-sm text-muted-foreground">No recent candidates</p>
           )}
         </div>
       </div>

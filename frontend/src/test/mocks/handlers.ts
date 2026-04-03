@@ -87,28 +87,20 @@ export const handlers = [
     })
   }),
 
-  // Request OTP endpoint
-  http.post(`${API_BASE}/auth/request-code`, async ({ request }) => {
-    const body = await request.json() as { email: string }
-    
+  const otpSendGenericMessage =
+    'If an account exists for this email, a verification code has been sent.'
+
+  // Request OTP endpoint (generic response — anti-enumeration)
+  http.post(`${API_BASE}/auth/request-code`, async () => {
     return HttpResponse.json({
-      message: 'Verification code sent'
+      message: otpSendGenericMessage,
     })
   }),
 
-  // Resend verification endpoint
-  http.post(`${API_BASE}/auth/resend-verification`, async ({ request }) => {
-    const body = await request.json() as { email: string }
-    
-    if (body.email === 'notfound@example.com') {
-      return HttpResponse.json(
-        { detail: 'User does not exist' },
-        { status: 404 }
-      )
-    }
-    
+  // Resend verification endpoint (same generic response for all emails)
+  http.post(`${API_BASE}/auth/resend-verification`, async () => {
     return HttpResponse.json({
-      message: 'Verification code sent'
+      message: otpSendGenericMessage,
     })
   }),
 ]

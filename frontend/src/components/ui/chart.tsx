@@ -1,263 +1,373 @@
-// Simple chart components using SVG for visualizations
-// This is a lightweight alternative to external charting libraries
+"use client"
 
-interface ChartData {
-  label: string;
-  value: number;
-  color?: string;
+import * as React from "react"
+import * as RechartsPrimitive from "recharts"
+import type { TooltipValueType } from "recharts"
+
+import { cn } from "@/lib/utils"
+
+// Format: { THEME_NAME: CSS_SELECTOR }
+const THEMES = { light: "", dark: ".dark" } as const
+
+const INITIAL_DIMENSION = { width: 320, height: 200 } as const
+type TooltipNameType = number | string
+
+export type ChartConfig = Record<
+  string,
+  {
+    label?: React.ReactNode
+    icon?: React.ComponentType
+  } & (
+    | { color?: string; theme?: never }
+    | { color?: never; theme: Record<keyof typeof THEMES, string> }
+  )
+>
+
+type ChartContextProps = {
+  config: ChartConfig
 }
 
-interface LineChartData {
-  label: string;
-  value: number;
+const ChartContext = React.createContext<ChartContextProps | null>(null)
+
+function useChart() {
+  const context = React.useContext(ChartContext)
+
+  if (!context) {
+    throw new Error("useChart must be used within a <ChartContainer />")
+  }
+
+  return context
 }
 
-// Simple Line Chart Component
-export function LineChart({ 
-  data, 
-  height = 200, 
-  width = 400,
-  strokeColor = "#3b82f6",
-  className = ""
-}: {
-  data: LineChartData[];
-  height?: number;
-  width?: number;
-  strokeColor?: string;
-  className?: string;
+function ChartContainer({
+  id,
+  className,
+  children,
+  config,
+  initialDimension = INITIAL_DIMENSION,
+  ...props
+}: React.ComponentProps<"div"> & {
+  config: ChartConfig
+  children: React.ComponentProps<
+    typeof RechartsPrimitive.ResponsiveContainer
+  >["children"]
+  initialDimension?: {
+    width: number
+    height: number
+  }
 }) {
-  if (!data || data.length === 0) return <div>No data</div>;
-
-  const maxValue = Math.max(...data.map(d => d.value));
-  const minValue = Math.min(...data.map(d => d.value));
-  const range = maxValue - minValue || 1;
-  
-  const points = data.map((point, index) => {
-    const x = (index / (data.length - 1)) * (width - 60) + 30;
-    const y = height - 40 - ((point.value - minValue) / range) * (height - 80);
-    return `${x},${y}`;
-  }).join(' ');
+  const uniqueId = React.useId()
+  const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
 
   return (
-    <div className={`overflow-hidden ${className}`}>
-      <svg width={width} height={height} className="w-full h-full">
-        {/* Grid lines */}
-        <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="1" opacity="0.3"/>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
-        
-        {/* Y-axis labels */}
-        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-          const y = height - 40 - ratio * (height - 80);
-          const value = Math.round(minValue + ratio * range);
-          return (
-            <text key={ratio} x="5" y={y + 3} fontSize="10" fill="#6b7280" textAnchor="start">
-              {value}
-            </text>
-          );
-        })}
-        
-        {/* Line */}
-        <polyline
-          points={points}
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        
-        {/* Data points */}
-        {data.map((point, index) => {
-          const x = (index / (data.length - 1)) * (width - 60) + 30;
-          const y = height - 40 - ((point.value - minValue) / range) * (height - 80);
-          return (
-            <circle
-              key={index}
-              cx={x}
-              cy={y}
-              r="3"
-              fill={strokeColor}
-              className="hover:r-4 transition-all"
-            />
-          );
-        })}
-        
-        {/* X-axis labels */}
-        {data.map((point, index) => {
-          if (index % Math.ceil(data.length / 6) === 0) {
-            const x = (index / (data.length - 1)) * (width - 60) + 30;
+    <ChartContext.Provider value={{ config }}>
+      <div
+        data-slot="chart"
+        data-chart={chartId}
+        className={cn(
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+          className
+        )}
+        {...props}
+      >
+        <ChartStyle id={chartId} config={config} />
+        <RechartsPrimitive.ResponsiveContainer
+          initialDimension={initialDimension}
+        >
+          {children}
+        </RechartsPrimitive.ResponsiveContainer>
+      </div>
+    </ChartContext.Provider>
+  )
+}
+
+const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  const colorConfig = Object.entries(config).filter(
+    ([, config]) => config.theme ?? config.color
+  )
+
+  if (!colorConfig.length) {
+    return null
+  }
+
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: Object.entries(THEMES)
+          .map(
+            ([theme, prefix]) => `
+${prefix} [data-chart=${id}] {
+${colorConfig
+  .map(([key, itemConfig]) => {
+    const color =
+      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ??
+      itemConfig.color
+    return color ? `  --color-${key}: ${color};` : null
+  })
+  .join("\n")}
+}
+`
+          )
+          .join("\n"),
+      }}
+    />
+  )
+}
+
+const ChartTooltip = RechartsPrimitive.Tooltip
+
+function ChartTooltipContent({
+  active,
+  payload,
+  className,
+  indicator = "dot",
+  hideLabel = false,
+  hideIndicator = false,
+  label,
+  labelFormatter,
+  labelClassName,
+  formatter,
+  color,
+  nameKey,
+  labelKey,
+}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+  React.ComponentProps<"div"> & {
+    hideLabel?: boolean
+    hideIndicator?: boolean
+    indicator?: "line" | "dot" | "dashed"
+    nameKey?: string
+    labelKey?: string
+  } & Omit<
+    RechartsPrimitive.DefaultTooltipContentProps<
+      TooltipValueType,
+      TooltipNameType
+    >,
+    "accessibilityLayer"
+  >) {
+  const { config } = useChart()
+
+  const tooltipLabel = React.useMemo(() => {
+    if (hideLabel || !payload?.length) {
+      return null
+    }
+
+    const [item] = payload
+    const key = `${labelKey ?? item?.dataKey ?? item?.name ?? "value"}`
+    const itemConfig = getPayloadConfigFromPayload(config, item, key)
+    const value =
+      !labelKey && typeof label === "string"
+        ? (config[label]?.label ?? label)
+        : itemConfig?.label
+
+    if (labelFormatter) {
+      return (
+        <div className={cn("font-medium", labelClassName)}>
+          {labelFormatter(value, payload)}
+        </div>
+      )
+    }
+
+    if (!value) {
+      return null
+    }
+
+    return <div className={cn("font-medium", labelClassName)}>{value}</div>
+  }, [
+    label,
+    labelFormatter,
+    payload,
+    hideLabel,
+    labelClassName,
+    config,
+    labelKey,
+  ])
+
+  if (!active || !payload?.length) {
+    return null
+  }
+
+  const nestLabel = payload.length === 1 && indicator !== "dot"
+
+  return (
+    <div
+      className={cn(
+        "grid min-w-32 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
+        className
+      )}
+    >
+      {!nestLabel ? tooltipLabel : null}
+      <div className="grid gap-1.5">
+        {payload
+          .filter((item) => item.type !== "none")
+          .map((item, index) => {
+            const key = `${nameKey ?? item.name ?? item.dataKey ?? "value"}`
+            const itemConfig = getPayloadConfigFromPayload(config, item, key)
+            const indicatorColor = color ?? item.payload?.fill ?? item.color
+
             return (
-              <text 
-                key={index} 
-                x={x} 
-                y={height - 10} 
-                fontSize="10" 
-                fill="#6b7280" 
-                textAnchor="middle"
+              <div
+                key={index}
+                className={cn(
+                  "flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
+                  indicator === "dot" && "items-center"
+                )}
               >
-                {point.label}
-              </text>
-            );
-          }
-          return null;
-        })}
-      </svg>
-    </div>
-  );
-}
-
-// Simple Bar Chart Component
-export function BarChart({ 
-  data, 
-  height = 200, 
-  width = 400,
-  className = ""
-}: {
-  data: ChartData[];
-  height?: number;
-  width?: number;
-  className?: string;
-}) {
-  if (!data || data.length === 0) return <div>No data</div>;
-
-  const maxValue = Math.max(...data.map(d => d.value));
-  const barWidth = (width - 60) / data.length - 10;
-  
-  return (
-    <div className={`overflow-hidden ${className}`}>
-      <svg width={width} height={height} className="w-full h-full">
-        {/* Bars */}
-        {data.map((item, index) => {
-          const barHeight = (item.value / maxValue) * (height - 60);
-          const x = 30 + index * ((width - 60) / data.length);
-          const y = height - 40 - barHeight;
-          
-          return (
-            <g key={index}>
-              <rect
-                x={x}
-                y={y}
-                width={barWidth}
-                height={barHeight}
-                fill={item.color || "#3b82f6"}
-                rx="2"
-                className="hover:opacity-80 transition-opacity"
-              />
-              <text
-                x={x + barWidth / 2}
-                y={height - 25}
-                fontSize="10"
-                fill="#6b7280"
-                textAnchor="middle"
-              >
-                {item.label}
-              </text>
-              <text
-                x={x + barWidth / 2}
-                y={y - 5}
-                fontSize="10"
-                fill="#374151"
-                textAnchor="middle"
-                fontWeight="500"
-              >
-                {item.value}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
-// Simple Donut Chart Component
-export function DonutChart({ 
-  data, 
-  size = 200,
-  className = ""
-}: {
-  data: ChartData[];
-  size?: number;
-  className?: string;
-}) {
-  if (!data || data.length === 0) return <div>No data</div>;
-
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  const center = size / 2;
-  const radius = size * 0.35;
-  const innerRadius = radius * 0.6;
-  
-  let cumulativeAngle = 0;
-  const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-
-  return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      <svg width={size} height={size}>
-        {data.map((item, index) => {
-          const angle = (item.value / total) * 360;
-          const startAngle = cumulativeAngle;
-          const endAngle = cumulativeAngle + angle;
-          
-          const largeArcFlag = angle > 180 ? 1 : 0;
-          const startAngleRad = (startAngle * Math.PI) / 180;
-          const endAngleRad = (endAngle * Math.PI) / 180;
-          
-          const x1 = center + radius * Math.cos(startAngleRad);
-          const y1 = center + radius * Math.sin(startAngleRad);
-          const x2 = center + radius * Math.cos(endAngleRad);
-          const y2 = center + radius * Math.sin(endAngleRad);
-          
-          const ix1 = center + innerRadius * Math.cos(startAngleRad);
-          const iy1 = center + innerRadius * Math.sin(startAngleRad);
-          const ix2 = center + innerRadius * Math.cos(endAngleRad);
-          const iy2 = center + innerRadius * Math.sin(endAngleRad);
-          
-          const pathData = [
-            `M ${ix1} ${iy1}`,
-            `L ${x1} ${y1}`,
-            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-            `L ${ix2} ${iy2}`,
-            `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${ix1} ${iy1}`,
-            'Z'
-          ].join(' ');
-          
-          cumulativeAngle += angle;
-          
-          return (
-            <path
-              key={index}
-              d={pathData}
-              fill={item.color || defaultColors[index % defaultColors.length]}
-              className="hover:opacity-80 transition-opacity cursor-pointer"
-            />
-          );
-        })}
-        {/* Center text */}
-        <text x={center} y={center - 5} textAnchor="middle" className="text-lg font-semibold fill-gray-700">
-          {total}
-        </text>
-        <text x={center} y={center + 12} textAnchor="middle" className="text-xs fill-gray-500">
-          Total
-        </text>
-      </svg>
-      
-      {/* Legend */}
-      <div className="space-y-2">
-        {data.map((item, index) => (
-          <div key={index} className="flex items-center gap-2 text-sm">
-            <div 
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: item.color || defaultColors[index % defaultColors.length] }}
-            />
-            <span className="text-gray-700">{item.label}</span>
-            <span className="text-gray-500">({item.value})</span>
-          </div>
-        ))}
+                {formatter && item?.value !== undefined && item.name ? (
+                  formatter(item.value, item.name, item, index, item.payload)
+                ) : (
+                  <>
+                    {itemConfig?.icon ? (
+                      <itemConfig.icon />
+                    ) : (
+                      !hideIndicator && (
+                        <div
+                          className={cn(
+                            "shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
+                            {
+                              "h-2.5 w-2.5": indicator === "dot",
+                              "w-1": indicator === "line",
+                              "w-0 border-[1.5px] border-dashed bg-transparent":
+                                indicator === "dashed",
+                              "my-0.5": nestLabel && indicator === "dashed",
+                            }
+                          )}
+                          style={
+                            {
+                              "--color-bg": indicatorColor,
+                              "--color-border": indicatorColor,
+                            } as React.CSSProperties
+                          }
+                        />
+                      )
+                    )}
+                    <div
+                      className={cn(
+                        "flex flex-1 justify-between leading-none",
+                        nestLabel ? "items-end" : "items-center"
+                      )}
+                    >
+                      <div className="grid gap-1.5">
+                        {nestLabel ? tooltipLabel : null}
+                        <span className="text-muted-foreground">
+                          {itemConfig?.label ?? item.name}
+                        </span>
+                      </div>
+                      {item.value != null && (
+                        <span className="font-mono font-medium text-foreground tabular-nums">
+                          {typeof item.value === "number"
+                            ? item.value.toLocaleString()
+                            : String(item.value)}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          })}
       </div>
     </div>
-  );
+  )
+}
+
+const ChartLegend = RechartsPrimitive.Legend
+
+function ChartLegendContent({
+  className,
+  hideIcon = false,
+  payload,
+  verticalAlign = "bottom",
+  nameKey,
+}: React.ComponentProps<"div"> & {
+  hideIcon?: boolean
+  nameKey?: string
+} & RechartsPrimitive.DefaultLegendContentProps) {
+  const { config } = useChart()
+
+  if (!payload?.length) {
+    return null
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center gap-4",
+        verticalAlign === "top" ? "pb-3" : "pt-3",
+        className
+      )}
+    >
+      {payload
+        .filter((item) => item.type !== "none")
+        .map((item, index) => {
+          const key = `${nameKey ?? item.dataKey ?? "value"}`
+          const itemConfig = getPayloadConfigFromPayload(config, item, key)
+
+          return (
+            <div
+              key={index}
+              className={cn(
+                "flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground"
+              )}
+            >
+              {itemConfig?.icon && !hideIcon ? (
+                <itemConfig.icon />
+              ) : (
+                <div
+                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{
+                    backgroundColor: item.color,
+                  }}
+                />
+              )}
+              {itemConfig?.label}
+            </div>
+          )
+        })}
+    </div>
+  )
+}
+
+function getPayloadConfigFromPayload(
+  config: ChartConfig,
+  payload: unknown,
+  key: string
+) {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined
+  }
+
+  const payloadPayload =
+    "payload" in payload &&
+    typeof payload.payload === "object" &&
+    payload.payload !== null
+      ? payload.payload
+      : undefined
+
+  let configLabelKey: string = key
+
+  if (
+    key in payload &&
+    typeof payload[key as keyof typeof payload] === "string"
+  ) {
+    configLabelKey = payload[key as keyof typeof payload] as string
+  } else if (
+    payloadPayload &&
+    key in payloadPayload &&
+    typeof payloadPayload[key as keyof typeof payloadPayload] === "string"
+  ) {
+    configLabelKey = payloadPayload[
+      key as keyof typeof payloadPayload
+    ] as string
+  }
+
+  return configLabelKey in config ? config[configLabelKey] : config[key]
+}
+
+export {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  ChartStyle,
 }

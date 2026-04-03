@@ -2,7 +2,7 @@ import os
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -14,6 +14,9 @@ from app.db.session import SessionLocal
 from app.db.models.user import User
 from app.db.models.token_blacklist import TokenBlacklist
 from app.db.models.refresh_token import RefreshToken
+
+# Cookie-based auth: httpOnly JWTs + optional Bearer fallback. CSRF posture (SameSite, CORS, optional tokens)
+# is documented in the repo at docs/CSRF-and-auth.md.
 
 # Security configuration from environment variables
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -158,6 +161,9 @@ def revoke_all_user_refresh_tokens(user_id: int, db: Session):
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_PRODUCTION = ENVIRONMENT == "production"
 
+# Must match `app.include_router(auth.router, prefix="/api/auth")` — refresh is only sent to URLs under this path.
+REFRESH_COOKIE_PATH = "/api/auth"
+
 
 def _is_secure_request(request: Request = None) -> bool:
     if IS_PRODUCTION:
@@ -167,49 +173,123 @@ def _is_secure_request(request: Request = None) -> bool:
     return False
 
 
+def _resolve_auth_cookie_attributes(request: Optional[Request]) -> Tuple[bool, str, Optional[str]]:
+    """
+    Returns (secure, samesite, domain) for Set-Cookie.
+
+    - AUTH_COOKIE_DOMAIN: optional e.g. `.example.com` so cookies work across `app.*` and `api.*`.
+      Omit for host-only cookies (typical for localhost / single-host API).
+    - AUTH_COOKIE_SAMESITE: `lax` (default), `strict`, or `none`.
+      Use `none` only when the SPA and API are on different sites and you need cross-site credentialed
+      requests; browsers require `Secure` with `SameSite=None` (we force secure=True in that case).
+    """
+    secure = _is_secure_request(request)
+    raw = (os.getenv("AUTH_COOKIE_SAMESITE") or "lax").strip().lower()
+    if raw not in ("lax", "strict", "none"):
+        raw = "lax"
+    if raw == "none":
+        secure = True
+    domain = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
+    return secure, raw, domain
+
+
+def _apply_set_cookie(
+    response: Response,
+    *,
+    key: str,
+    value: str,
+    max_age: int,
+    path: str,
+    request: Optional[Request],
+) -> None:
+    secure, samesite, domain = _resolve_auth_cookie_attributes(request)
+    if domain:
+        response.set_cookie(
+            key=key,
+            value=value,
+            max_age=max_age,
+            path=path,
+            domain=domain,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+        )
+    else:
+        response.set_cookie(
+            key=key,
+            value=value,
+            max_age=max_age,
+            path=path,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+        )
+
+
+def _apply_delete_cookie(
+    response: Response,
+    *,
+    key: str,
+    path: str,
+    request: Optional[Request],
+) -> None:
+    secure, samesite, domain = _resolve_auth_cookie_attributes(request)
+    if domain:
+        response.delete_cookie(
+            key,
+            path=path,
+            domain=domain,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+        )
+    else:
+        response.delete_cookie(
+            key,
+            path=path,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+        )
+
+
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str, request: Request = None) -> None:
     """Set both access and refresh token cookies."""
-    secure = _is_secure_request(request)
-    response.set_cookie(
+    _apply_set_cookie(
+        response,
         key="access_token",
         value=access_token,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
+        request=request,
     )
-    response.set_cookie(
+    _apply_set_cookie(
+        response,
         key="refresh_token",
         value=refresh_token,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        path="/api/auth",  # Only sent to auth endpoints
+        path=REFRESH_COOKIE_PATH,
+        request=request,
     )
 
 
 # Keep backward compat for any code still using set_auth_cookie
 def set_auth_cookie(response: Response, token: str, request: Request = None) -> None:
     """Set JWT token as an httpOnly cookie (access token only)."""
-    secure = _is_secure_request(request)
-    response.set_cookie(
+    _apply_set_cookie(
+        response,
         key="access_token",
         value=token,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
+        request=request,
     )
 
 
 def clear_auth_cookies(response: Response, request: Request = None) -> None:
-    """Clear both auth cookies."""
-    secure = _is_secure_request(request)
-    response.delete_cookie(key="access_token", httponly=True, secure=secure, samesite="lax", path="/")
-    response.delete_cookie(key="refresh_token", httponly=True, secure=secure, samesite="lax", path="/api/auth")
+    """Clear both auth cookies (must match same path/domain/samesite as when set)."""
+    _apply_delete_cookie(response, key="access_token", path="/", request=request)
+    _apply_delete_cookie(response, key="refresh_token", path=REFRESH_COOKIE_PATH, request=request)
 
 
 # Keep backward compat
@@ -267,6 +347,26 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+ORG_MEMBERSHIP_REQUIRED_DETAIL = (
+    "You must belong to an organization to access this resource"
+)
+
+
+def require_org_member(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Tenant scope for B2B routes: require `organization_id` before running queries that
+    filter by it. Without this, `column == None` can match NULL rows and leak data across tenants.
+    """
+    if current_user.organization_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ORG_MEMBERSHIP_REQUIRED_DETAIL,
+        )
+    return current_user
 
 
 def logout_user(token: str, db: Session) -> bool:

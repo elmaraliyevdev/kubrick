@@ -16,6 +16,7 @@ from app.core.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from app.core.email import send_login_otp, send_email_verification, send_password_reset_otp
+from app.core.otp_rate_limit import enforce_otp_send_rate_limit
 from app.db.models.user import User
 from app.db.models.otp_code import OtpCode
 from app.db.models.organization import Organization
@@ -25,6 +26,11 @@ from fastapi.responses import JSONResponse
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["auth"])
+
+# Same body for OTP send endpoints whether the user exists / is eligible — avoids email enumeration.
+OTP_SEND_GENERIC_MESSAGE = (
+    "If an account exists for this email, a verification code has been sent."
+)
 
 
 def _create_auth_response(user: User, db: Session, request: Request) -> JSONResponse:
@@ -161,6 +167,13 @@ def login_password(request: Request, payload: LoginPasswordRequest, db: Session 
 @limiter.limit(RateLimitConfig.get_rate('auth'))
 @router.post("/request-code")
 async def request_code(request: Request, payload: RequestCodeRequest, db: Session = Depends(get_db)):
+    enforce_otp_send_rate_limit(request, payload.email)
+    generic = {"message": OTP_SEND_GENERIC_MESSAGE}
+
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        return generic
+
     code = str(secrets.SystemRandom().randint(100000, 999999))
 
     otp = OtpCode(
@@ -174,7 +187,7 @@ async def request_code(request: Request, payload: RequestCodeRequest, db: Sessio
 
     await send_login_otp(payload.email, code)
 
-    return {"message": "Verification code sent"}
+    return generic
 
 
 # -------------------------
@@ -183,12 +196,12 @@ async def request_code(request: Request, payload: RequestCodeRequest, db: Sessio
 @limiter.limit(RateLimitConfig.get_rate('auth'))
 @router.post("/resend-verification")
 async def resend_verification(request: Request, payload: RequestCodeRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User does not exist")
+    enforce_otp_send_rate_limit(request, payload.email)
+    generic = {"message": OTP_SEND_GENERIC_MESSAGE}
 
-    if user.email_verified:
-        raise HTTPException(status_code=400, detail="Email already verified")
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user or user.email_verified:
+        return generic
 
     code = str(secrets.SystemRandom().randint(100000, 999999))
     otp = OtpCode(
@@ -201,7 +214,7 @@ async def resend_verification(request: Request, payload: RequestCodeRequest, db:
     db.commit()
 
     await send_email_verification(payload.email, code)
-    return {"message": "Verification code sent"}
+    return generic
 
 
 # -------------------------
@@ -226,11 +239,11 @@ def verify_code(request: Request, payload: VerifyCodeRequest, db: Session = Depe
 
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User does not exist")
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     if otp_code_type == "email_verification":
         if user.email_verified:
-            raise HTTPException(status_code=400, detail="Email already verified")
+            raise HTTPException(status_code=400, detail="Invalid or expired code")
         user.email_verified = True
         db.commit()
 
@@ -330,6 +343,7 @@ def logout_endpoint(request: Request, db: Session = Depends(get_db)):
 @limiter.limit(RateLimitConfig.get_rate('auth'))
 @router.post("/forgot-password")
 async def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    enforce_otp_send_rate_limit(request, payload.email)
     message = "If an account with that email exists, a password reset code has been sent."
 
     user = db.query(User).filter(User.email == payload.email).first()
@@ -376,7 +390,7 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
 
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     user.hashed_password = hash_password(payload.new_password)
     db.commit()

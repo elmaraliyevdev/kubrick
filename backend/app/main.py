@@ -17,6 +17,7 @@ from app.middleware.security import SecurityMiddleware, RequestSizeMiddleware
 import app.db.models
 
 from app.api import auth, jobs, organizations, candidates, files, matches, health, public_careers, application_form, dashboard, job_applications
+from app.core.security import REFRESH_COOKIE_PATH
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -42,15 +43,27 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["127.0.0.1", "::1"])
 app.add_middleware(SecurityMiddleware)
 app.add_middleware(RequestSizeMiddleware, max_size=50 * 1024 * 1024)  # 50MB max
 
-# CORS configuration — support subdomains for career pages
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+# CORS configuration — support subdomains for career pages.
+# Include both localhost and 127.0.0.1 (and common Vite ports): they are different browser origins.
+_default_origins = (
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:5174,http://127.0.0.1:5174"
+)
+allowed_origins = [
+    o.strip() for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",") if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https?://.*\.kubrick\.app|https?://.*\.localhost:\d+",
+    allow_origin_regex=(
+        r"https?://.*\.kubrick\.app|"
+        r"https?://.*\.localhost:\d+|"
+        r"https?://127\.0\.0\.1:\d+|"
+        r"https?://localhost:\d+"
+    ),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -79,6 +92,12 @@ async def startup_event():
     logger.info("Kubrick API starting up...")
     logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
     logger.info(f"Debug mode: {os.getenv('DEBUG', 'false')}")
+    logger.info(
+        "Auth cookies: samesite=%s domain=%s refresh_path=%s",
+        os.getenv("AUTH_COOKIE_SAMESITE", "lax"),
+        os.getenv("AUTH_COOKIE_DOMAIN") or "(host-only)",
+        REFRESH_COOKIE_PATH,
+    )
 
 @app.on_event("shutdown")
 async def shutdown_event():

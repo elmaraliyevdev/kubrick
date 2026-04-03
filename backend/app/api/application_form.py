@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.db.models.user import User
 from app.db.models.application_form_config import ApplicationFormConfig
 from app.db.models.custom_form_field import CustomFormField
@@ -54,12 +54,10 @@ def _slugify_field_key(label: str) -> str:
 @router.get("", response_model=FullApplicationFormResponse)
 def get_application_form(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Get the full application form configuration for the current org."""
     _require_email_verified(current_user)
-    if not current_user.organization_id:
-        raise HTTPException(status_code=400, detail="User must belong to an organization")
 
     config = _get_or_create_config(current_user.organization_id, db)
     db.commit()
@@ -83,13 +81,11 @@ def get_application_form(
 def update_form_config(
     payload: ApplicationFormConfigUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Update which default fields are shown/required on the application form."""
     _require_email_verified(current_user)
     _require_admin(current_user)
-    if not current_user.organization_id:
-        raise HTTPException(status_code=400, detail="User must belong to an organization")
 
     config = _get_or_create_config(current_user.organization_id, db)
 
@@ -108,13 +104,11 @@ def update_form_config(
 def create_custom_field(
     payload: CustomFormFieldCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Create a new custom form field for the org's application form."""
     _require_email_verified(current_user)
     _require_admin(current_user)
-    if not current_user.organization_id:
-        raise HTTPException(status_code=400, detail="User must belong to an organization")
 
     field_key = _slugify_field_key(payload.label)
 
@@ -157,7 +151,7 @@ def update_custom_field(
     field_id: int,
     payload: CustomFormFieldUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Update a custom form field."""
     _require_email_verified(current_user)
@@ -200,7 +194,7 @@ def update_custom_field(
 def delete_custom_field(
     field_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Delete a custom form field."""
     _require_email_verified(current_user)
@@ -221,7 +215,7 @@ def delete_custom_field(
 def reorder_custom_fields(
     payload: ReorderFieldsRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     """Reorder custom fields by providing an ordered list of field IDs."""
     _require_email_verified(current_user)

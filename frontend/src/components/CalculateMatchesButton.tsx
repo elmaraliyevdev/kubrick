@@ -93,7 +93,7 @@ export function CalculateMatchesButton({
       <button
         onClick={handleCalculate}
         disabled={disabled || isCalculating}
-        className={`bg-gray-900 text-white rounded-md h-9 px-4 text-sm disabled:opacity-50 ${className}`}
+        className={`inline-flex items-center justify-center bg-gray-900 text-white rounded-lg h-10 min-h-10 px-4 text-sm font-medium leading-5 disabled:opacity-50 ${className}`}
       >
         {isCalculating
           ? "Calculating..."

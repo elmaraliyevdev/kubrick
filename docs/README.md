@@ -20,6 +20,16 @@ This repository contains three main parts:
   - SQLAlchemy + Alembic + PostgreSQL
   - Resume parsing with an LLM strategy and a regex fallback
 
+### Security (CSRF and cookies)
+
+Cookie-based auth needs an explicit **CSRF posture** when the SPA and API are not strictly same-site, or when using `SameSite=None`. See:
+
+- **[CSRF and cookie-based authentication](./CSRF-and-auth.md)** — SameSite/CORS behavior, current mitigations, and hardening options (double-submit token, Bearer-only access, etc.).
+
+### Authorization (organization / tenant scoping)
+
+B2B routes must not scope data only by “authenticated user” when queries filter on `organization_id`: if `organization_id` is `NULL` on the user, comparisons can match unintended rows. Org-scoped endpoints use **`require_org_member`** (`backend/app/core/security.py`) so the user must have an **`organization_id`** before any tenant-filtered query runs. **`GET /api/dashboard/stats`** and **`/api/auth/*` profile** endpoints intentionally use **`get_current_user`** only (e.g. users still completing onboarding). Role checks (`admin` vs `recruiter`) remain on top of org membership where applicable.
+
 ### Frontend (React)
 - Uses React Router with two “modes”:
   - Dashboard app (protected): `frontend/src/MainApp.tsx`

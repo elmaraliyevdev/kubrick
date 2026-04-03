@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.db.models.candidate import Candidate
 from app.db.models.job import Job
 from app.db.models.job_application import JobApplication
@@ -53,7 +53,7 @@ def _serialize_card(app: JobApplication) -> Dict[str, Any]:
 def get_job_pipeline(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     job = db.query(Job).filter(Job.id == job_id, Job.organization_id == current_user.organization_id).first()
     if not job:
@@ -92,7 +92,7 @@ def get_job_pipeline(
 def get_global_pipeline(
     job_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     jobs = (
         db.query(Job)
@@ -163,7 +163,7 @@ def move_application_stage(
     application_id: int,
     payload: StageMoveRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     target_stage = payload.stage.strip()
     if target_stage not in PIPELINE_STAGES:

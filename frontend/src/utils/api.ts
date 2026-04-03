@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clientLogout } from "@/utils/clientLogout";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -61,14 +62,7 @@ api.interceptors.response.use(
         processQueue(refreshError);
 
         // Refresh failed — session is truly expired
-        localStorage.removeItem("user");
-
-        const isAuthRoute =
-          window.location.pathname.startsWith("/login") ||
-          window.location.pathname.startsWith("/register");
-        if (!isAuthRoute) {
-          window.location.href = "/login";
-        }
+        clientLogout({ redirectTo: "/login" });
 
         return Promise.reject(refreshError);
       } finally {

@@ -3,15 +3,13 @@ import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
 
 // Re-export types for backward compatibility
-export type { AuthState, Organization, User } from "@/types/auth";
+export type { AuthState, AuthStatus, Organization, User } from "@/types/auth";
 
 const initialState: AuthState = {
   token: null,
-  user: localStorage.getItem("user")
-    ? JSON.parse(localStorage.getItem("user")!)
-    : null,
-  // Start as true if we have cached user data — ProtectedRoute will validate via /auth/me
-  isAuthenticated: !!localStorage.getItem("user"),
+  user: null,
+  /** Never derive this from cached localStorage — wait for `/auth/me` or explicit `setUser` after login. */
+  authStatus: "unknown",
   isLoading: false,
   error: null,
 };
@@ -31,25 +29,28 @@ const authSlice = createSlice({
       action: PayloadAction<{ token?: string; user?: User }>
     ) => {
       state.token = null;
-      state.user = action.payload.user || null;
-      state.isAuthenticated = true;
       state.isLoading = false;
       state.error = null;
       if (action.payload.user) {
+        state.user = action.payload.user;
+        state.authStatus = "authenticated";
         localStorage.setItem("user", JSON.stringify(action.payload.user));
+      } else {
+        /* Password/OTP flow: not authenticated until `setUser` from `/auth/me`. */
+        state.authStatus = "unknown";
       }
     },
     logout: (state) => {
       state.token = null;
       state.user = null;
-      state.isAuthenticated = false;
+      state.authStatus = "unauthenticated";
       state.isLoading = false;
       state.error = null;
       localStorage.removeItem("user");
     },
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
-      state.isAuthenticated = true;
+      state.authStatus = "authenticated";
       localStorage.setItem("user", JSON.stringify(action.payload));
     },
     clearError: (state) => {

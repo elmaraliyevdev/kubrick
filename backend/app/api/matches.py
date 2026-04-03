@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from app.db.models.candidate_job_match import CandidateJobMatch
 from app.db.models.candidate import Candidate
 from app.db.models.job import Job
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.db.models.user import User
 from app.services.candidate_matching_service import CandidateMatchingService
 
@@ -17,7 +17,7 @@ def get_detailed_match_analysis(
     candidate_id: int,
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Get detailed match analysis for a specific candidate-job pair"""
     
@@ -87,7 +87,7 @@ def get_skills_gap_analysis(
     candidate_id: int,
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Get skills gap analysis for a candidate-job pair"""
     
@@ -150,7 +150,7 @@ async def recalculate_single_match(
     candidate_id: int,
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Recalculate match score for a specific candidate-job pair"""
     
@@ -202,11 +202,10 @@ async def recalculate_single_match(
 def get_matching_statistics(
     organization_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Get matching statistics for an organization (admin only)"""
-    
-    # Verify user belongs to the organization
+    # Path must match the authenticated tenant (do not trust client-supplied org id alone)
     if current_user.organization_id != organization_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

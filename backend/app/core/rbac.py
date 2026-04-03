@@ -4,7 +4,7 @@ Role-Based Access Control (RBAC) implementation.
 from functools import wraps
 from typing import List, Union, Callable, Any
 from fastapi import HTTPException, status, Depends
-from app.core.security import get_current_user, get_db
+from app.core.security import get_current_user, get_db, require_org_member
 from app.db.models.user import User
 from sqlalchemy.orm import Session
 
@@ -161,15 +161,8 @@ class RBACDependencies:
     
     @staticmethod
     def require_organization_access():
-        """Ensure user can only access their organization's data."""
-        def check_organization(
-            current_user: User = Depends(get_current_user),
-            db: Session = Depends(get_db)
-        ):
-            if not current_user.organization_id:
-                raise PermissionDenied("User must be associated with an organization")
-            return current_user
-        return check_organization
+        """Ensure the user belongs to an organization (same as Depends(require_org_member))."""
+        return require_org_member
 
 
 def check_resource_ownership(user: User, resource_user_id: int, resource_org_id: int = None) -> bool:

@@ -13,7 +13,7 @@ class TestRegistration:
     def test_register_success(self, client: TestClient, mock_email_send, db_session):
         """Test successful user registration."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={"email": "test@example.com", "password": "TestPass123"}
         )
         
@@ -48,7 +48,7 @@ class TestRegistration:
         db_session.commit()
         
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={"email": "test@example.com", "password": "TestPass123"}
         )
         
@@ -58,7 +58,7 @@ class TestRegistration:
     def test_register_weak_password(self, client: TestClient):
         """Test registration with weak password fails."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={"email": "test@example.com", "password": "weak"}
         )
         
@@ -90,7 +90,7 @@ class TestEmailVerification:
         db_session.commit()
         
         response = client.post(
-            "/auth/verify-code",
+            "/api/auth/verify-code",
             json={"email": "test@example.com", "code": "123456"}
         )
         
@@ -118,7 +118,7 @@ class TestEmailVerification:
         db_session.commit()
         
         response = client.post(
-            "/auth/verify-code",
+            "/api/auth/verify-code",
             json={"email": "test@example.com", "code": "wrong"}
         )
         
@@ -146,12 +146,38 @@ class TestEmailVerification:
         db_session.commit()
         
         response = client.post(
-            "/auth/verify-code",
+            "/api/auth/verify-code",
             json={"email": "test@example.com", "code": "123456"}
         )
         
         assert response.status_code == 400
         assert "Invalid or expired" in response.json()["detail"]
+
+    def test_verify_code_already_verified_generic(self, client: TestClient, db_session):
+        """Already-verified user must not get a distinct error (anti-enumeration)."""
+        user = User(
+            email="done@example.com",
+            hashed_password=hash_password("TestPass123"),
+            email_verified=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        otp = OtpCode(
+            email="done@example.com",
+            code="654321",
+            code_type="email_verification",
+            expires_at=datetime.utcnow() + timedelta(minutes=5),
+        )
+        db_session.add(otp)
+        db_session.commit()
+
+        response = client.post(
+            "/api/auth/verify-code",
+            json={"email": "done@example.com", "code": "654321"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid or expired code"
 
     def test_resend_verification(self, client: TestClient, db_session, mock_email_send):
         """Test resending verification email."""
@@ -164,7 +190,7 @@ class TestEmailVerification:
         db_session.commit()
         
         response = client.post(
-            "/auth/resend-verification",
+            "/api/auth/resend-verification",
             json={"email": "test@example.com"}
         )
         
@@ -175,6 +201,69 @@ class TestEmailVerification:
         otp = db_session.query(OtpCode).filter(OtpCode.email == "test@example.com").first()
         assert otp is not None
         assert otp.code_type == "email_verification"
+
+    def test_resend_verification_unknown_email_generic(self, client: TestClient, mock_email_send):
+        """Unknown email returns the same success body and sends no email (anti-enumeration)."""
+        response = client.post(
+            "/api/auth/resend-verification",
+            json={"email": "nobody@example.com"},
+        )
+        assert response.status_code == 200
+        assert "verification code has been sent" in response.json()["message"]
+        assert len(mock_email_send) == 0
+
+    def test_resend_verification_already_verified_generic(
+        self, client: TestClient, db_session, mock_email_send
+    ):
+        """Verified user gets the same generic response; no new email."""
+        user = User(
+            email="verified@example.com",
+            hashed_password=hash_password("TestPass123"),
+            email_verified=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        response = client.post(
+            "/api/auth/resend-verification",
+            json={"email": "verified@example.com"},
+        )
+        assert response.status_code == 200
+        assert "verification code has been sent" in response.json()["message"]
+        assert len(mock_email_send) == 0
+
+
+class TestRequestCode:
+    """Login OTP request (anti-enumeration)."""
+
+    def test_request_code_unknown_email_no_send(self, client: TestClient, mock_email_send, db_session):
+        response = client.post(
+            "/api/auth/request-code",
+            json={"email": "missing@example.com"},
+        )
+        assert response.status_code == 200
+        assert "verification code has been sent" in response.json()["message"]
+        assert len(mock_email_send) == 0
+        assert db_session.query(OtpCode).filter(OtpCode.email == "missing@example.com").first() is None
+
+    def test_request_code_existing_user_sends(self, client: TestClient, db_session, mock_email_send):
+        user = User(
+            email="exists@example.com",
+            hashed_password=hash_password("TestPass123"),
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        response = client.post(
+            "/api/auth/request-code",
+            json={"email": "exists@example.com"},
+        )
+        assert response.status_code == 200
+        assert "verification code has been sent" in response.json()["message"]
+        assert len(mock_email_send) == 1
+        otp = db_session.query(OtpCode).filter(OtpCode.email == "exists@example.com").first()
+        assert otp is not None
+        assert otp.code_type == "login"
 
 
 class TestCompleteProfile:
@@ -196,7 +285,7 @@ class TestCompleteProfile:
         token = create_access_token(data={"sub": user.email})
         
         response = client.post(
-            "/auth/complete-profile",
+            "/api/auth/complete-profile",
             json={
                 "first_name": "John", 
                 "last_name": "Doe",
@@ -214,7 +303,7 @@ class TestCompleteProfile:
     def test_complete_profile_unauthorized(self, client: TestClient):
         """Test profile completion without authentication fails."""
         response = client.post(
-            "/auth/complete-profile",
+            "/api/auth/complete-profile",
             json={
                 "first_name": "John", 
                 "last_name": "Doe",
@@ -239,7 +328,7 @@ class TestPasswordLogin:
         db_session.commit()
         
         response = client.post(
-            "/auth/login-password",
+            "/api/auth/login-password",
             json={"email": "test@example.com", "password": "TestPass123"}
         )
         
@@ -258,7 +347,7 @@ class TestPasswordLogin:
         db_session.commit()
         
         response = client.post(
-            "/auth/login-password",
+            "/api/auth/login-password",
             json={"email": "test@example.com", "password": "wrongpass"}
         )
         

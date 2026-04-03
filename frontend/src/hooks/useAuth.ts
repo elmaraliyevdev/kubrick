@@ -1,7 +1,8 @@
 import type { RootState } from "@/store";
-import { loginSuccess, logout, setError, setUser } from "@/store/authSlice";
+import { loginSuccess, setError, setUser } from "@/store/authSlice";
 import type { LoginCredentials, OTPRequest, OTPVerification, RegisterCredentials, User } from "@/types/auth";
 import api from "@/utils/api";
+import { clientLogout } from "@/utils/clientLogout";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -29,9 +30,10 @@ export const useAuth = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { token, user, isAuthenticated, isLoading, error } = useSelector(
+  const { token, user, authStatus, isLoading, error } = useSelector(
     (state: RootState) => state.auth
   );
+  const isAuthenticated = authStatus === "authenticated";
 
   // Helper function to fetch user profile.
   // Uses the token directly when available (right after login), otherwise relies on the httpOnly cookie.
@@ -157,8 +159,7 @@ export const useAuth = () => {
     } catch {
       // Best-effort — clear client state even if backend call fails
     }
-    queryClient.clear();
-    dispatch(logout());
+    clientLogout();
     navigate("/login");
   };
 
@@ -166,6 +167,8 @@ export const useAuth = () => {
     // State
     token,
     user,
+    authStatus,
+    /** True only when the session is validated (`authStatus === "authenticated"`). */
     isAuthenticated,
     isLoading,
     error,

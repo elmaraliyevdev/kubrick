@@ -13,7 +13,7 @@ from app.db.models.invite import Invite
 from app.schemas.organization import OrganizationUpdate, OrganizationResponse
 from app.schemas.user import UserResponse
 from app.schemas.invite import InviteResponse
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.core.email import send_invite_email
 
 router = APIRouter()
@@ -28,7 +28,7 @@ ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.webp'}
 @router.get("/me", response_model=OrganizationResponse)
 def get_my_org(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_org_member)
 ):
     org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
     if not org:
@@ -41,7 +41,7 @@ def get_my_org(
 def update_org(
     org_data: OrganizationUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_org_member)
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can update organization")
@@ -73,7 +73,7 @@ def update_org(
 async def upload_logo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can update organization")
@@ -118,7 +118,7 @@ async def upload_logo(
 @router.delete("/me/logo", response_model=OrganizationResponse)
 def delete_logo(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can update organization")
@@ -142,7 +142,7 @@ def delete_logo(
 @router.get("/me/users", response_model=List[UserResponse])
 def list_org_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_org_member)
 ):
     return db.query(User).filter(User.organization_id == current_user.organization_id).all()
 
@@ -152,7 +152,7 @@ def list_org_users(
 def invite_user(
     email: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_org_member)
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can invite users")

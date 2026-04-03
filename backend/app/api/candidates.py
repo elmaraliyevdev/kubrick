@@ -11,7 +11,7 @@ from app.schemas.candidate import (
     CandidateUpdate,
     CandidateListResponse
 )
-from app.core.security import get_current_user, get_db
+from app.core.security import get_db, require_org_member
 from app.db.models.user import User
 from app.services.candidate_matching_service import CandidateMatchingService
 from app.core.validation import validate_search_query, validate_pagination_params
@@ -38,15 +38,9 @@ def list_candidates(
         limit: int = Query(100, ge=1, le=1000),
         search: Optional[str] = Query(None, description="Search by name or email"),
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """List all candidates for the current user's organization"""
-    if not current_user.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User must be part of an organization to view candidates"
-        )
-
     # Base query
     query = db.query(Candidate).filter(
         Candidate.organization_id == current_user.organization_id
@@ -138,15 +132,9 @@ def list_candidates(
 def create_candidate(
         candidate: CandidateCreate,
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Create a new candidate"""
-    if not current_user.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User must be part of an organization to create candidates"
-        )
-
     # Check if candidate with this email already exists in the organization
     if candidate.email:
         existing = db.query(Candidate).filter(
@@ -189,7 +177,7 @@ def create_candidate(
 def get_candidate(
         candidate_id: int,
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Get a specific candidate by ID"""
     candidate = db.query(Candidate).options(joinedload(Candidate.work_experiences)).filter(
@@ -247,7 +235,7 @@ def update_candidate(
         candidate_id: int,
         candidate_update: CandidateUpdate,
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Update a candidate"""
     db_candidate = db.query(Candidate).filter(
@@ -325,7 +313,7 @@ def update_candidate(
 def delete_candidate(
         candidate_id: int,
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_org_member),
 ):
     """Delete a candidate"""
     db_candidate = db.query(Candidate).filter(
@@ -352,7 +340,7 @@ def get_candidate_job_matches(
     candidate_id: int,
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Get job matches for a specific candidate ranked by AI score"""
     
@@ -395,7 +383,7 @@ def get_candidate_job_matches(
 async def recalculate_candidate_matches(
     candidate_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_org_member),
 ) -> Dict[str, Any]:
     """Recalculate all match scores for a candidate (after candidate data changes)"""
     

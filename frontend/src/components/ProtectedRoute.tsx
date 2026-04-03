@@ -10,9 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, isAuthenticated } = useSelector(
-    (state: RootState) => state.auth
-  );
+  const { user, authStatus } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const location = useLocation();
   const [isValidating, setIsValidating] = useState(true);
@@ -52,8 +50,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // Not authenticated after validation
-  if (!isAuthenticated) {
+  // Not authenticated after validation (never trust cached localStorage alone)
+  if (authStatus !== "authenticated") {
     return <Navigate to="/login" replace />;
   }
 

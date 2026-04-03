@@ -3,18 +3,11 @@ import { JobDrawer } from "@/components/JobDrawer";
 import { RankedCandidatesList } from "@/components/RankedCandidatesList";
 import { PipelineBoard } from "@/components/PipelineBoard";
 import { SegmentedTabs } from "@/components/SegmentedTabs";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useDeleteJob, useJob } from "@/hooks/useJobs";
+import { cn } from "@/lib/utils";
 import { matchesApi } from "@/services/matches";
 import type { CandidateMatch, MatchCalculationResult } from "@/types/match";
+import * as Dialog from "@radix-ui/react-dialog";
 import { IconTrash } from "@tabler/icons-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -47,6 +40,17 @@ function BulletSection({ title, items }: { title: string; items: string[] | unde
         ))}
       </ul>
     </section>
+  );
+}
+
+function actionButtonClassName(variant: "solid" | "outline" | "destructive") {
+  return cn(
+    "inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+    "disabled:pointer-events-none disabled:opacity-50",
+    variant === "solid" && "bg-gray-900 text-white hover:bg-gray-800",
+    variant === "outline" && "border border-gray-200 bg-white text-gray-900 hover:bg-gray-50",
+    variant === "destructive" && "bg-red-600 text-white hover:bg-red-700"
   );
 }
 
@@ -338,13 +342,15 @@ export default function JobDetail() {
 
       {activeTab === "matches" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <CalculateMatchesButton
-              jobId={job.id}
-              onCalculationComplete={handleCalculationComplete}
-              variant="default"
-            />
-          </div>
+          {!(rankedCandidates.length > 0 && !isLoadingMatches) && (
+            <div className="flex justify-end">
+              <CalculateMatchesButton
+                jobId={job.id}
+                onCalculationComplete={handleCalculationComplete}
+                variant="default"
+              />
+            </div>
+          )}
           {isLoadingMatches ? (
             <div className="animate-pulse space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -356,6 +362,13 @@ export default function JobDetail() {
               candidates={rankedCandidates}
               onCandidateSelect={handleCandidateSelect}
               onViewDetails={handleViewDetails}
+              toolbarActions={
+                <CalculateMatchesButton
+                  jobId={job.id}
+                  onCalculationComplete={handleCalculationComplete}
+                  variant="default"
+                />
+              }
             />
           ) : (
             <div className="bg-white border border-gray-200 rounded-lg p-6 text-center">
@@ -376,29 +389,43 @@ export default function JobDetail() {
 
       <JobDrawer open={drawerOpen} onOpenChange={setDrawerOpen} job={job} mode="edit" />
 
-      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remove job?</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove this job? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setRemoveDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleteJobMutation.isPending}
-              onClick={handleConfirmRemoveJob}
-            >
-              {deleteJobMutation.isPending ? "Removing…" : "Remove"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Dialog.Root open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+          <Dialog.Content
+            className={cn(
+              "fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2",
+              "rounded-xl border border-gray-200 bg-white p-6 shadow-xl",
+              "focus:outline-none"
+            )}
+          >
+            <div className="space-y-1">
+              <Dialog.Title className="text-base font-semibold text-gray-900">Remove job?</Dialog.Title>
+              <Dialog.Description className="text-sm text-gray-600">
+                Are you sure you want to remove this job? This action cannot be undone.
+              </Dialog.Description>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className={actionButtonClassName("outline")}
+                onClick={() => setRemoveDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={actionButtonClassName("destructive")}
+                disabled={deleteJobMutation.isPending}
+                onClick={handleConfirmRemoveJob}
+              >
+                {deleteJobMutation.isPending ? "Removing…" : "Remove"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
