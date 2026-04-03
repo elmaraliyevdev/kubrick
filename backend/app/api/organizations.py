@@ -10,7 +10,11 @@ from typing import List
 from app.db.models.organization import Organization
 from app.db.models.user import User
 from app.db.models.invite import Invite
-from app.schemas.organization import OrganizationUpdate, OrganizationResponse
+from app.schemas.organization import (
+    OrganizationUpdate,
+    OrganizationResponse,
+    OrganizationUserUpdate,
+)
 from app.schemas.user import UserResponse
 from app.schemas.invite import InviteResponse
 from app.core.security import get_db, require_org_member
@@ -145,6 +149,75 @@ def list_org_users(
     current_user: User = Depends(require_org_member)
 ):
     return db.query(User).filter(User.organization_id == current_user.organization_id).all()
+
+
+def _role_str(role) -> str:
+    return role.value if hasattr(role, "value") else str(role)
+
+
+def _active_admin_count_after(
+    db: Session,
+    org_id: int,
+    target: User,
+    new_role: str,
+    new_active: bool,
+) -> int:
+    new_role_s = _role_str(new_role)
+    n = 0
+    for u in db.query(User).filter(User.organization_id == org_id).all():
+        role = new_role_s if u.id == target.id else _role_str(u.role)
+        active = new_active if u.id == target.id else u.is_active
+        if active and role == "admin":
+            n += 1
+    return n
+
+
+# Update org member (admins only): role and/or active flag
+@router.patch("/me/users/{user_id}", response_model=UserResponse)
+def update_org_user(
+    user_id: int,
+    payload: OrganizationUserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage team members")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    target = (
+        db.query(User)
+        .filter(
+            User.id == user_id,
+            User.organization_id == current_user.organization_id,
+        )
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_role = _role_str(updates["role"]) if "role" in updates else _role_str(target.role)
+    new_active = updates.get("is_active", target.is_active)
+
+    if target.id == current_user.id and new_active is False:
+        raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
+
+    if _active_admin_count_after(db, current_user.organization_id, target, new_role, new_active) < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Organization must keep at least one active admin",
+        )
+
+    if "role" in updates:
+        target.role = updates["role"]
+    if "is_active" in updates:
+        target.is_active = updates["is_active"]
+
+    db.commit()
+    db.refresh(target)
+    return target
 
 
 # Invite user (real onboarding)

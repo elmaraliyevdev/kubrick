@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional
+from typing import Literal, Optional
 
 
 class OrganizationBase(BaseModel):
@@ -25,6 +25,13 @@ class OrganizationUpdate(BaseModel):
             if not v.startswith("#") or len(v) not in (4, 7):
                 raise ValueError("Brand color must be a hex color like #4F46E5")
         return v
+
+
+class OrganizationUserUpdate(BaseModel):
+    """Admin-only updates for a user in the current organization."""
+
+    role: Optional[Literal["admin", "recruiter"]] = None
+    is_active: Optional[bool] = None
 
 
 class OrganizationResponse(OrganizationBase):

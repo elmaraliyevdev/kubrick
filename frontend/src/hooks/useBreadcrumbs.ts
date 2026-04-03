@@ -44,6 +44,7 @@ export function useBreadcrumbs(): Breadcrumb[] {
       "/settings/profile": "Profile",
       "/settings/organization": "Organization",
       "/settings/career-page": "Career Page",
+      "/settings/matching": "Matching",
     };
     const subLabel = settingsRoutes[pathname];
     if (subLabel) {

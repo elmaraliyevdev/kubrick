@@ -1,10 +1,12 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.security import get_db, require_org_member
+from app.core.validation import validate_search_query
 from app.db.models.candidate import Candidate
 from app.db.models.job import Job
 from app.db.models.job_application import JobApplication
@@ -14,11 +16,21 @@ router = APIRouter(tags=["pipeline"])
 
 
 PIPELINE_STAGES: List[str] = ["applied", "screening", "interview", "offer", "hired"]
-PIPELINE_STAGE_ORDER: Dict[str, int] = {stage: idx for idx, stage in enumerate(PIPELINE_STAGES)}
 
 
 class StageMoveRequest(BaseModel):
     stage: str
+
+
+class BulkAddApplicantsRequest(BaseModel):
+    candidate_ids: List[int]
+
+    @field_validator("candidate_ids")
+    @classmethod
+    def dedupe_and_limit(cls, v: List[int]) -> List[int]:
+        if len(v) > 200:
+            raise ValueError("At most 200 candidates per request")
+        return list(dict.fromkeys(v))
 
 
 def _candidate_name(candidate: Candidate) -> str:
@@ -86,6 +98,102 @@ def get_job_pipeline(
         "job_title": job.title,
         "stages": stages,
     }
+
+
+@router.get("/jobs/{job_id}/pipeline/eligible-candidates")
+def get_eligible_pipeline_candidates(
+    job_id: int,
+    search: Optional[str] = Query(None, description="Filter by name or email"),
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+) -> Dict[str, Any]:
+    """Candidates in the org who do not yet have an application for this job."""
+    job = db.query(Job).filter(Job.id == job_id, Job.organization_id == current_user.organization_id).first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    existing_ids = [
+        row[0]
+        for row in db.query(JobApplication.candidate_id).filter(JobApplication.job_id == job_id).all()
+    ]
+
+    query = db.query(Candidate).filter(Candidate.organization_id == current_user.organization_id)
+    if existing_ids:
+        query = query.filter(~Candidate.id.in_(existing_ids))
+
+    if search:
+        try:
+            sanitized = validate_search_query(search)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        if sanitized:
+            sf = f"%{sanitized}%"
+            query = query.filter(
+                or_(
+                    Candidate.first_name.ilike(sf),
+                    Candidate.last_name.ilike(sf),
+                    Candidate.email.ilike(sf),
+                )
+            )
+
+    candidates = query.order_by(Candidate.last_name, Candidate.first_name).limit(limit).all()
+
+    return {
+        "candidates": [
+            {
+                "id": c.id,
+                "first_name": c.first_name,
+                "last_name": c.last_name,
+                "email": c.email,
+            }
+            for c in candidates
+        ],
+    }
+
+
+@router.post("/jobs/{job_id}/pipeline/applicants")
+def add_pipeline_applicants(
+    job_id: int,
+    payload: BulkAddApplicantsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+) -> Dict[str, Any]:
+    """Create applications in the applied stage for the given candidates."""
+    job = db.query(Job).filter(Job.id == job_id, Job.organization_id == current_user.organization_id).first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    created: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+
+    for cid in payload.candidate_ids:
+        cand = (
+            db.query(Candidate)
+            .filter(Candidate.id == cid, Candidate.organization_id == current_user.organization_id)
+            .first()
+        )
+        if not cand:
+            skipped.append({"candidate_id": cid, "reason": "not_found"})
+            continue
+
+        exists = (
+            db.query(JobApplication)
+            .filter(JobApplication.job_id == job_id, JobApplication.candidate_id == cid)
+            .first()
+        )
+        if exists:
+            skipped.append({"candidate_id": cid, "reason": "already_applied"})
+            continue
+
+        app = JobApplication(job_id=job_id, candidate_id=cid, status="applied")
+        db.add(app)
+        db.flush()
+        created.append({"application_id": app.id, "candidate_id": cid})
+
+    db.commit()
+
+    return {"created": created, "skipped": skipped}
 
 
 @router.get("/pipeline")
@@ -183,13 +291,6 @@ def move_application_stage(
     )
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-
-    current_stage = app.status
-    if PIPELINE_STAGE_ORDER[target_stage] < PIPELINE_STAGE_ORDER[current_stage]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid stage transition: {current_stage} -> {target_stage}",
-        )
 
     app.status = target_stage
     db.add(app)

@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { BadgeCheck, ChevronsUpDown, CreditCard, LogOut, Sparkles, User } from "lucide-react";
+import { BadgeCheck, ChevronsUpDown, LogOut, User } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -82,28 +82,13 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link to="/settings/billing" className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  Upgrade to Pro
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
                 <Link to="/settings/profile" className="flex items-center gap-2">
                   <User className="h-4 w-4" />
                   Profile
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link to="/settings/billing" className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Billing
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="flex items-center gap-2">
+                <Link to="/settings/profile" className="flex items-center gap-2">
                   <BadgeCheck className="h-4 w-4" />
                   Settings
                 </Link>

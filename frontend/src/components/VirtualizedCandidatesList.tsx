@@ -68,7 +68,7 @@ function CandidateItem(props: {
 
   return (
     <div style={style} className="px-4">
-      <Card className="hover:shadow-md transition-shadow mb-4">
+      <Card className="mb-4">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Candidate Info */}

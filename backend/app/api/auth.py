@@ -21,7 +21,14 @@ from app.db.models.user import User
 from app.db.models.otp_code import OtpCode
 from app.db.models.organization import Organization
 from app.schemas.user import UserCreate, UserResponse, CompleteProfileRequest, UpdateProfileRequest
-from app.schemas.auth import RequestCodeRequest, VerifyCodeRequest, LoginPasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.schemas.auth import (
+    RequestCodeRequest,
+    VerifyCodeRequest,
+    LoginPasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    ChangePasswordRequest,
+)
 from fastapi.responses import JSONResponse
 
 limiter = Limiter(key_func=get_remote_address)
@@ -115,6 +122,7 @@ def complete_profile(
         Organization.name == payload.organization_name
     ).first()
 
+    new_org_created = False
     if not org:
         try:
             from app.utils.slug import generate_organization_slug
@@ -122,6 +130,7 @@ def complete_profile(
             org.slug = generate_organization_slug(payload.organization_name, db)
             db.add(org)
             db.flush()
+            new_org_created = True
         except IntegrityError:
             db.rollback()
             org = db.query(Organization).filter(
@@ -135,6 +144,8 @@ def complete_profile(
     user_to_update.first_name = payload.first_name
     user_to_update.last_name = payload.last_name
     user_to_update.organization_id = org.id
+    if new_org_created:
+        user_to_update.role = "admin"
 
     db.commit()
 
@@ -270,6 +281,61 @@ def refresh_token_endpoint(request: Request, db: Session = Depends(get_db)):
 
     # Rotate: revoke the old refresh token and issue a new pair
     revoke_refresh_token(token, db)
+
+    return _create_auth_response(user, db, request)
+
+
+# -------------------------
+# Resend email verification (authenticated)
+# -------------------------
+@limiter.limit(RateLimitConfig.get_rate("auth"))
+@router.post("/me/resend-verification")
+async def resend_verification_me(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.email_verified:
+        return {"message": "Email is already verified"}
+
+    enforce_otp_send_rate_limit(request, current_user.email)
+
+    code = str(secrets.SystemRandom().randint(100000, 999999))
+    otp = OtpCode(
+        email=current_user.email,
+        code=code,
+        code_type="email_verification",
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
+    )
+    db.add(otp)
+    db.commit()
+
+    await send_email_verification(current_user.email, code)
+    return {"message": "A new verification code has been sent to your email."}
+
+
+# -------------------------
+# Change password (authenticated)
+# -------------------------
+@limiter.limit(RateLimitConfig.get_rate("auth"))
+@router.post("/me/change-password")
+def change_password_me(
+    request: Request,
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+
+    revoke_all_user_refresh_tokens(user.id, db)
 
     return _create_auth_response(user, db, request)
 

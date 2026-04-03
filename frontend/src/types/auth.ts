@@ -31,6 +31,8 @@ export interface Organization {
   career_page_enabled?: boolean;
 }
 
+export type UserRole = "admin" | "recruiter";
+
 export interface User {
   id: number;
   email: string;
@@ -38,6 +40,8 @@ export interface User {
   first_name: string | null;
   last_name: string | null;
   organization_id: number | null;
+  role: UserRole;
+  is_active: boolean;
   organization?: Organization | null;
 }
 

@@ -56,12 +56,11 @@ class TestPipelineAPI:
         assert any(card["application_id"] == a1.id for card in payload["stages"]["applied"])
         assert any(card["application_id"] == a2.id for card in payload["stages"]["screening"])
 
-    def test_stage_move_allows_forward_only(self, client, auth_headers, db_session, test_user, test_organization):
+    def test_stage_move_allows_forward_and_backward(self, client, auth_headers, db_session, test_user, test_organization):
         job = self._create_job(db_session, test_organization.id, test_user.id, title="Job Move")
         candidate = self._create_candidate(db_session, test_organization.id, email="move@example.com")
         application = self._create_application(db_session, job.id, candidate.id, status_value="applied")
 
-        # applied -> screening (forward)
         resp = client.patch(
             f"/api/job-applications/{application.id}/stage",
             headers=auth_headers,
@@ -70,13 +69,13 @@ class TestPipelineAPI:
         assert resp.status_code == 200
         assert resp.json()["stage"] == "screening"
 
-        # screening -> applied (backward, should fail)
         resp2 = client.patch(
             f"/api/job-applications/{application.id}/stage",
             headers=auth_headers,
             json={"stage": "applied"},
         )
-        assert resp2.status_code == 400
+        assert resp2.status_code == 200
+        assert resp2.json()["stage"] == "applied"
 
     def test_stage_move_is_org_scoped(self, client, auth_headers, db_session, test_user, test_organization):
         # Create a different organization, and an application belonging to it.
@@ -96,4 +95,50 @@ class TestPipelineAPI:
             json={"stage": "screening"},
         )
         assert resp.status_code == 404
+
+    def test_eligible_candidates_excludes_already_applied(self, client, auth_headers, db_session, test_user, test_organization):
+        job = self._create_job(db_session, test_organization.id, test_user.id, title="Eligible Job")
+        on_job = self._create_candidate(db_session, test_organization.id, email="on@example.com", first_name="On", last_name="Job")
+        not_on = self._create_candidate(db_session, test_organization.id, email="not@example.com", first_name="Not", last_name="Yet")
+        self._create_application(db_session, job.id, on_job.id, status_value="applied")
+
+        resp = client.get(f"/api/jobs/{job.id}/pipeline/eligible-candidates", headers=auth_headers)
+        assert resp.status_code == 200
+        ids = {c["id"] for c in resp.json()["candidates"]}
+        assert on_job.id not in ids
+        assert not_on.id in ids
+
+    def test_add_pipeline_applicants_creates_applied(self, client, auth_headers, db_session, test_user, test_organization):
+        job = self._create_job(db_session, test_organization.id, test_user.id, title="Bulk Add Job")
+        c1 = self._create_candidate(db_session, test_organization.id, email="bulk1@example.com")
+        c2 = self._create_candidate(db_session, test_organization.id, email="bulk2@example.com")
+
+        resp = client.post(
+            f"/api/jobs/{job.id}/pipeline/applicants",
+            headers=auth_headers,
+            json={"candidate_ids": [c1.id, c2.id]},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["created"]) == 2
+        assert len(body["skipped"]) == 0
+
+        apps = db_session.query(JobApplication).filter(JobApplication.job_id == job.id).all()
+        assert len(apps) == 2
+        assert all(a.status == "applied" for a in apps)
+
+    def test_add_pipeline_applicants_skips_duplicate(self, client, auth_headers, db_session, test_user, test_organization):
+        job = self._create_job(db_session, test_organization.id, test_user.id, title="Dup Job")
+        c = self._create_candidate(db_session, test_organization.id, email="dup@example.com")
+        self._create_application(db_session, job.id, c.id, status_value="applied")
+
+        resp = client.post(
+            f"/api/jobs/{job.id}/pipeline/applicants",
+            headers=auth_headers,
+            json={"candidate_ids": [c.id]},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["created"]) == 0
+        assert any(s["reason"] == "already_applied" for s in body["skipped"])
 

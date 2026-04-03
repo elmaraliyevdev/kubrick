@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional
+from typing import Literal, Optional
 from app.schemas.organization import OrganizationResponse
 from app.core.validation import validate_email_format, InputSanitizer
 from app.core.password_security import PasswordStrength
@@ -43,6 +43,8 @@ class UserLogin(BaseModel):
 class UserResponse(UserBase):
     id: int
     email_verified: bool = False
+    role: Literal["admin", "recruiter"] = "recruiter"
+    is_active: bool = True
     organization: Optional[OrganizationResponse] = None  # 👈 may be null
 
     class Config:

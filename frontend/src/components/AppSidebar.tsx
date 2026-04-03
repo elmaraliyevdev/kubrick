@@ -4,7 +4,7 @@ import {
   Settings2,
   Users,
 } from "lucide-react";
-import * as React from "react";
+import { useMemo, type ComponentProps } from "react";
 
 import { NavMain } from "@/components/NavMain";
 import { NavUser } from "@/components/NavUser";
@@ -21,47 +21,42 @@ import {
 import type { RootState } from "@/store";
 import { useSelector } from "react-redux";
 
-const kubrickNavigation = {
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: Home,
-    },
-    {
-      title: "Jobs",
-      url: "/jobs",
-      icon: Briefcase,
-    },
-    {
-      title: "Candidates",
-      url: "/candidates",
-      icon: Users,
-    },
-    {
-      title: "Settings",
-      url: "/settings/profile",
-      icon: Settings2,
-      items: [
-        {
-          title: "Profile",
-          url: "/settings/profile",
-        },
-        {
-          title: "Organization",
-          url: "/settings/organization",
-        },
-        {
-          title: "Career Page",
-          url: "/settings/career-page",
-        },
-      ],
-    },
-  ],
-};
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const { user } = useSelector((state: RootState) => state.auth);
+
+  const navMain = useMemo(
+    () => [
+      {
+        title: "Dashboard",
+        url: "/dashboard",
+        icon: Home,
+      },
+      {
+        title: "Jobs",
+        url: "/jobs",
+        icon: Briefcase,
+      },
+      {
+        title: "Candidates",
+        url: "/candidates",
+        icon: Users,
+      },
+      {
+        title: "Settings",
+        url: "/settings/profile",
+        icon: Settings2,
+        items: [
+          { title: "Profile", url: "/settings/profile" },
+          { title: "Organization", url: "/settings/organization" },
+          { title: "Career Page", url: "/settings/career-page" },
+          ...(user?.role === "admin"
+            ? [{ title: "Matching", url: "/settings/matching" }]
+            : []),
+        ],
+      },
+    ],
+    [user?.role]
+  );
 
   const userData = {
     name:
@@ -114,7 +109,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar variant="inset" collapsible="icon" {...props}>
       {OrganizationHeader}
       <SidebarContent>
-        <NavMain items={kubrickNavigation.navMain} />
+        <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={userData} />

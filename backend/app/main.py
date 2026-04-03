@@ -16,7 +16,20 @@ from app.middleware.security import SecurityMiddleware, RequestSizeMiddleware
 
 import app.db.models
 
-from app.api import auth, jobs, organizations, candidates, files, matches, health, public_careers, application_form, dashboard, job_applications
+from app.api import (
+    auth,
+    jobs,
+    organizations,
+    candidates,
+    files,
+    matches,
+    health,
+    public_careers,
+    application_form,
+    dashboard,
+    job_applications,
+    matching_config,
+)
 from app.core.security import REFRESH_COOKIE_PATH
 
 limiter = Limiter(key_func=get_remote_address)
@@ -78,6 +91,11 @@ app.include_router(matches.router, prefix="/api/matches", tags=["matches"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(job_applications.router, prefix="/api", tags=["pipeline"])
 app.include_router(application_form.router, prefix="/api/organizations/me/application-form", tags=["application-form"])
+app.include_router(
+    matching_config.router,
+    prefix="/api/organizations/me/matching-config",
+    tags=["matching-config"],
+)
 app.include_router(public_careers.router, prefix="/api/careers", tags=["public-careers"])
 
 # Serve uploaded files (logos, etc.)

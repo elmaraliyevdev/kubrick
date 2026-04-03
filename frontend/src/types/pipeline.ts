@@ -46,3 +46,19 @@ export interface StageMovePayload {
   stage: PipelineStage;
 }
 
+export interface EligiblePipelineCandidate {
+  id: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
+export interface EligibleCandidatesResponse {
+  candidates: EligiblePipelineCandidate[];
+}
+
+export interface BulkAddApplicantsResponse {
+  created: { application_id: number; candidate_id: number }[];
+  skipped: { candidate_id: number; reason: string }[];
+}
+

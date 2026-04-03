@@ -6,6 +6,7 @@ import { Outlet } from "react-router-dom";
 export function DashboardLayout() {
   return (
     <SidebarProvider
+      className="h-svh max-h-svh overflow-hidden"
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -14,9 +15,9 @@ export function DashboardLayout() {
       }
     >
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-h-0 overflow-hidden">
         <DashboardHeader />
-        <div className="flex flex-1 flex-col gap-4 pt-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pt-0">
           <Outlet />
         </div>
       </SidebarInset>

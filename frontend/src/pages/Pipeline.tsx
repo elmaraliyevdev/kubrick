@@ -1,10 +1,12 @@
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { PipelineColumn } from "@/components/PipelineColumn";
+import { PipelineCardDragPreview } from "@/components/PipelineCard";
 import type { PipelineStage } from "@/types/pipeline";
 import { useGlobalPipeline, useMoveApplicationStage } from "@/hooks/usePipeline";
 import { PIPELINE_STAGES } from "@/constants/pipeline";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { findCardInStages } from "@/utils/pipelineDrag";
 import { useState } from "react";
 
 const STAGES = PIPELINE_STAGES;
@@ -19,7 +21,14 @@ export default function Pipeline() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
     const overStageRaw = (event.over?.data.current as any)?.stage;
     const overStage =
       typeof overStageRaw === "string" && STAGES.includes(overStageRaw as PipelineStage)
@@ -41,6 +50,13 @@ export default function Pipeline() {
 
     moveMutation.mutate({ applicationId, stage: overStage });
   };
+
+  const handleDragCancel = () => {
+    setActiveDragId(null);
+  };
+
+  const activeDrag =
+    board && activeDragId ? findCardInStages(board.stages, activeDragId) : null;
 
   const jobs = board?.jobs ?? [];
 
@@ -98,12 +114,28 @@ export default function Pipeline() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
           <div className="flex gap-4 overflow-x-auto pb-2">
             {STAGES.map((stage) => (
-              <PipelineColumn key={stage} stage={stage} cards={board.stages[stage] || []} />
+              <PipelineColumn
+                key={stage}
+                stage={stage}
+                cards={board.stages[stage] || []}
+                jobId={selectedJobId}
+              />
             ))}
           </div>
+          <DragOverlay dropAnimation={null}>
+            {activeDrag ? (
+              <PipelineCardDragPreview card={activeDrag.card} stage={activeDrag.stage} />
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </div>
     </div>

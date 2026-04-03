@@ -53,6 +53,8 @@ describe("authSlice", () => {
       first_name: "John",
       last_name: "Doe",
       organization_id: 1,
+      role: "admin" as const,
+      is_active: true,
     };
 
     const state = authReducer(initialState, loginSuccess({ user }));
@@ -80,6 +82,8 @@ describe("authSlice", () => {
       first_name: "John",
       last_name: "Doe",
       organization_id: 1,
+      role: "recruiter" as const,
+      is_active: true,
     };
 
     const state = authReducer(initialState, setUser(user));
@@ -99,6 +103,8 @@ describe("authSlice", () => {
         first_name: "John",
         last_name: "Doe",
         organization_id: 1,
+        role: "admin" as const,
+        is_active: true,
       },
       authStatus: "authenticated" as const,
       isLoading: false,

@@ -18,6 +18,7 @@ import VerifyEmail from "@/pages/VerifyEmail";
 import SettingsOrganization from "@/pages/settings/SettingsOrganization";
 import SettingsProfile from "@/pages/settings/SettingsProfile";
 import SettingsCareerPage from "@/pages/settings/SettingsCareerPage";
+import SettingsMatching from "@/pages/settings/SettingsMatching";
 import CareerLayout from "@/layouts/CareerLayout";
 import CareerPage from "@/pages/careers/CareerPage";
 import CareerJobDetail from "@/pages/careers/CareerJobDetail";
@@ -55,9 +56,11 @@ export default function MainApp() {
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="candidates" element={<Candidates />} />
           <Route path="candidates/:candidateId" element={<CandidateDetail />} />
+          <Route path="settings" element={<Navigate to="/settings/profile" replace />} />
           <Route path="settings/profile" element={<SettingsProfile />} />
           <Route path="settings/organization" element={<SettingsOrganization />} />
           <Route path="settings/career-page" element={<SettingsCareerPage />} />
+          <Route path="settings/matching" element={<SettingsMatching />} />
         </Route>
 
         {/* Special protected route without layout */}

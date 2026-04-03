@@ -43,6 +43,8 @@ export interface DataTableProps<TData, TValue> {
   emptyMessage?: string;
   /** Initial sort (e.g. score desc) */
   initialSorting?: SortingState;
+  /** Initial column visibility (e.g. hide optional columns by default) */
+  initialColumnVisibility?: VisibilityState;
 }
 
 export function DataTable<TData, TValue>({
@@ -55,10 +57,11 @@ export function DataTable<TData, TValue>({
   globalFilterFn,
   emptyMessage = "No results.",
   initialSorting = [],
+  initialColumnVisibility = {},
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialColumnVisibility);
   const [globalFilter, setGlobalFilter] = React.useState("");
 
   const table = useReactTable({

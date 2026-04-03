@@ -83,6 +83,30 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError('; '.join(errors))
         return v
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("current_password")
+    @classmethod
+    def validate_current_password(cls, v: str) -> str:
+        if not v or len(v) > 128:
+            raise ValueError("Invalid current password")
+        if not InputSanitizer.validate_sql_safe(v):
+            raise ValueError("Invalid password format")
+        return v
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        from app.core.password_security import PasswordStrength
+
+        is_valid, errors = PasswordStrength.check_complexity(v)
+        if not is_valid:
+            raise ValueError("; ".join(errors))
+        return v
+
+
 class VerifyCodeRequest(BaseModel):
     email: EmailStr
     code: str

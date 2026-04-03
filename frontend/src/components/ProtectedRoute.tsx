@@ -55,9 +55,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />;
   }
 
-  // Check if user's email is verified
+  // Check if user's email is verified (allow verify flow + settings so users can resend codes / read status)
   const isOnVerifyEmailPage = location.pathname === "/verify-email";
-  if (user && !user.email_verified && !isOnVerifyEmailPage) {
+  const isOnSettingsPage = location.pathname.startsWith("/settings");
+  if (user && !user.email_verified && !isOnVerifyEmailPage && !isOnSettingsPage) {
     localStorage.setItem("pendingVerificationEmail", user.email);
     return <Navigate to="/verify-email" replace />;
   }
