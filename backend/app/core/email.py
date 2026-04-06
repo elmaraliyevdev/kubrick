@@ -82,6 +82,19 @@ async def send_password_reset_otp(email: str, code: str):
     )
 
 
+async def send_email_change_verification(email: str, code: str):
+    """Send OTP to confirm a new account email address."""
+    return await send_email(
+        to_email=email,
+        subject=f"Confirm your new email: {code}",
+        html=_otp_html(
+            code,
+            "Confirm your new email",
+            "Use the code below to verify this address and update your Kubrick account email.",
+        ),
+    )
+
+
 async def send_application_confirmation(
     candidate_email: str,
     candidate_name: str,

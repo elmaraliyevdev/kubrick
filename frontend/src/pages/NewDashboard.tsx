@@ -43,7 +43,7 @@ export default function Dashboard() {
     return (
       <div className="p-6 space-y-8">
         <div className="h-6 w-48 rounded bg-muted animate-pulse" />
-        <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
@@ -69,7 +69,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Open Positions */}
         <Card className="@container/card">
           <CardHeader>

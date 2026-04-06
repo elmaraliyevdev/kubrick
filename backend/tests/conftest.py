@@ -119,6 +119,7 @@ def mock_email_send():
         patch("app.api.auth.send_login_otp", side_effect=_capture),
         patch("app.api.auth.send_email_verification", side_effect=_capture),
         patch("app.api.auth.send_password_reset_otp", side_effect=_capture),
+        patch("app.api.auth.send_email_change_verification", side_effect=_capture),
     ):
         yield sent
 

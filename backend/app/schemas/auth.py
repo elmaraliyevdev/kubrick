@@ -130,3 +130,48 @@ class VerifyCodeRequest(BaseModel):
         if not v.isdigit():
             raise ValueError('Verification code must contain only numbers')
         return v
+
+
+class RequestEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+    password: str
+
+    @field_validator("new_email")
+    @classmethod
+    def validate_new_email_format(cls, v: str) -> str:
+        if len(v) > 254:
+            raise ValueError("Email address too long")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters long")
+        if len(v) > 128:
+            raise ValueError("Password too long")
+        if not InputSanitizer.validate_sql_safe(v):
+            raise ValueError("Invalid password format")
+        return v
+
+
+class ConfirmEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+    code: str
+
+    @field_validator("new_email")
+    @classmethod
+    def validate_new_email_format(cls, v: str) -> str:
+        if len(v) > 254:
+            raise ValueError("Email address too long")
+        return v
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        v = InputSanitizer.sanitize_text(v)
+        if len(v) != 6:
+            raise ValueError("Verification code must be 6 digits")
+        if not v.isdigit():
+            raise ValueError("Verification code must contain only numbers")
+        return v

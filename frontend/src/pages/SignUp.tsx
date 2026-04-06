@@ -97,13 +97,13 @@ export default function SignUp() {
             />
             <label htmlFor="terms" className="text-sm text-gray-500">
               I agree to the{" "}
-              <a href="#" className="text-gray-900 hover:underline">
-                Terms of Service
-              </a>{" "}
+              <Link to="/terms" className="text-gray-900 hover:underline">
+                Terms of Use
+              </Link>{" "}
               and{" "}
-              <a href="#" className="text-gray-900 hover:underline">
+              <Link to="/privacy" className="text-gray-900 hover:underline">
                 Privacy Policy
-              </a>
+              </Link>
             </label>
           </div>
 

@@ -314,6 +314,85 @@ class TestCompleteProfile:
         assert response.status_code == 401
 
 
+class TestEmailChange:
+    """Change account email with password + OTP to new address."""
+
+    def test_request_email_change_sends_code(
+        self, client: TestClient, db_session, test_user, auth_headers, mock_email_send
+    ):
+        r = client.post(
+            "/api/auth/me/request-email-change",
+            json={"new_email": "newmail@example.com", "password": "testpassword123"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert len(mock_email_send) == 1
+        assert mock_email_send[0]["to"] == "newmail@example.com"
+        otp = (
+            db_session.query(OtpCode)
+            .filter(
+                OtpCode.email == "newmail@example.com",
+                OtpCode.code_type == "email_change",
+                OtpCode.user_id == test_user.id,
+            )
+            .first()
+        )
+        assert otp is not None
+
+    def test_confirm_email_change_updates_email_and_cookies(
+        self, client: TestClient, db_session, test_user, auth_headers, mock_email_send
+    ):
+        otp = OtpCode(
+            email="newmail@example.com",
+            code="111222",
+            code_type="email_change",
+            expires_at=datetime.utcnow() + timedelta(minutes=5),
+            user_id=test_user.id,
+        )
+        db_session.add(otp)
+        db_session.commit()
+
+        r = client.post(
+            "/api/auth/me/confirm-email-change",
+            json={"new_email": "newmail@example.com", "code": "111222"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json().get("access_token")
+        db_session.refresh(test_user)
+        assert test_user.email == "newmail@example.com"
+        assert test_user.email_verified is True
+
+    def test_request_email_change_wrong_password(
+        self, client: TestClient, test_user, auth_headers, mock_email_send
+    ):
+        r = client.post(
+            "/api/auth/me/request-email-change",
+            json={"new_email": "newmail@example.com", "password": "wrong"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 400
+        assert len(mock_email_send) == 0
+
+    def test_resend_email_change(
+        self, client: TestClient, db_session, test_user, auth_headers, mock_email_send
+    ):
+        otp = OtpCode(
+            email="newmail@example.com",
+            code="111222",
+            code_type="email_change",
+            expires_at=datetime.utcnow() + timedelta(minutes=5),
+            user_id=test_user.id,
+        )
+        db_session.add(otp)
+        db_session.commit()
+
+        r = client.post("/api/auth/me/resend-email-change", headers=auth_headers)
+        assert r.status_code == 200
+        assert len(mock_email_send) == 1
+        assert mock_email_send[0]["to"] == "newmail@example.com"
+
+
 class TestPasswordLogin:
     """Test password login flow."""
 

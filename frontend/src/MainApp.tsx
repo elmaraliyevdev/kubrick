@@ -15,6 +15,7 @@ import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
 import SignUp from "@/pages/SignUp";
 import VerifyEmail from "@/pages/VerifyEmail";
+import VerifyEmailChange from "@/pages/VerifyEmailChange";
 import SettingsOrganization from "@/pages/settings/SettingsOrganization";
 import SettingsProfile from "@/pages/settings/SettingsProfile";
 import SettingsCareerPage from "@/pages/settings/SettingsCareerPage";
@@ -22,6 +23,8 @@ import SettingsMatching from "@/pages/settings/SettingsMatching";
 import CareerLayout from "@/layouts/CareerLayout";
 import CareerPage from "@/pages/careers/CareerPage";
 import CareerJobDetail from "@/pages/careers/CareerJobDetail";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsOfUse from "@/pages/TermsOfUse";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 /**
@@ -37,8 +40,18 @@ export default function MainApp() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route
+          path="/settings/verify-email-change"
+          element={
+            <ProtectedRoute>
+              <VerifyEmailChange />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfUse />} />
 
         {/* Protected routes with layout */}
         <Route

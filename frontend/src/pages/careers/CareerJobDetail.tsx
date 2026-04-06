@@ -1,10 +1,15 @@
 import { useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useCareerJobDetail, useApplyToJob } from "@/hooks/useCareers";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { ArrowLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const WORK_ARRANGEMENTS: Record<string, string> = {
   remote_only: "Remote Only",
@@ -34,15 +39,17 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
     jobSlug: string;
   }>();
   const orgSlug = propSlug || paramOrgSlug;
-  const { data: job, isLoading, error } = useCareerJobDetail(
-    orgSlug || "",
-    jobSlug || ""
-  );
+  const { data: job, isLoading, error } = useCareerJobDetail(orgSlug || "", jobSlug || "");
   const applyMutation = useApplyToJob();
 
   const [submitted, setSubmitted] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const applicationRef = useRef<HTMLDivElement>(null);
+
+  const scrollToApplication = () => {
+    applicationRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -56,10 +63,7 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
       return;
     }
 
-    // Validate file
-    const ext = selectedFile.name
-      .substring(selectedFile.name.lastIndexOf("."))
-      .toLowerCase();
+    const ext = selectedFile.name.substring(selectedFile.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
       toast.error(`File type not supported. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`);
       return;
@@ -91,49 +95,48 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
       { orgSlug, jobSlug, formData },
       {
         onSuccess: () => setSubmitted(true),
-        onError: (err: any) => {
-          if (err.response?.status === 409) {
+        onError: (err: unknown) => {
+          const ax = err as { response?: { status?: number; data?: { detail?: string } } };
+          if (ax.response?.status === 409) {
             toast.error("You have already applied for this position");
           } else {
-            toast.error(
-              err.response?.data?.detail || "Failed to submit application"
-            );
+            toast.error(ax.response?.data?.detail || "Failed to submit application");
           }
         },
       }
     );
   };
 
+  const backHref = propSlug ? "/" : `/${orgSlug}`;
+
   if (error) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-lg font-medium text-gray-900 mb-2">
-          Job not found
-        </h2>
-        <p className="text-sm text-gray-500">
+      <div className="text-center py-20 max-w-md mx-auto">
+        <h2 className="text-lg font-semibold text-foreground mb-2">Job not found</h2>
+        <p className="text-sm text-muted-foreground mb-6">
           This job posting may have been closed or removed.
         </p>
-        <Link
-          to={propSlug ? "/" : `/${orgSlug}`}
-          className="text-sm text-blue-500 mt-4 inline-block hover:underline"
-        >
-          Back to all jobs
-        </Link>
+        <Button variant="outline" asChild>
+          <Link to={backHref} className="inline-flex items-center gap-2">
+            <ArrowLeft className="size-4" aria-hidden />
+            Back to all jobs
+          </Link>
+        </Button>
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-4">
-          <div className="h-8 bg-gray-100 rounded w-64 animate-pulse" />
-          <div className="h-4 bg-gray-100 rounded w-96 animate-pulse" />
-          <div className="h-64 bg-gray-100 rounded w-full animate-pulse" />
+      <div className="space-y-8 max-w-3xl">
+        <div className="h-4 bg-muted rounded w-40 animate-pulse" />
+        <div className="h-10 bg-muted rounded w-3/4 animate-pulse" />
+        <div className="flex gap-2">
+          <div className="h-6 bg-muted rounded w-20 animate-pulse" />
+          <div className="h-6 bg-muted rounded w-24 animate-pulse" />
         </div>
-        <div className="space-y-4">
-          <div className="h-48 bg-gray-100 rounded w-full animate-pulse" />
-        </div>
+        <div className="h-64 bg-muted rounded w-full animate-pulse" />
+        <div className="h-96 bg-muted rounded w-full animate-pulse" />
       </div>
     );
   }
@@ -143,231 +146,200 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
   const bulletSection = (title: string, items?: string[]) => {
     if (!items || items.length === 0) return null;
     return (
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-gray-900 mb-2">{title}</h3>
-        <ul className="space-y-1.5">
+      <section className="mb-10">
+        <h2 className="text-base font-semibold text-foreground mb-3">{title}</h2>
+        <ul className="space-y-2">
           {items.map((item, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-gray-500 leading-relaxed">
-              <span className="text-gray-300 mt-0.5">•</span>
-              {item}
+            <li key={i} className="flex gap-3 text-sm text-muted-foreground leading-relaxed">
+              <span
+                className="text-primary mt-1.5 size-1.5 shrink-0 rounded-full bg-primary/80"
+                aria-hidden
+              />
+              <span>{item}</span>
             </li>
           ))}
         </ul>
-      </div>
+      </section>
     );
   };
 
+  const postedLabel = new Date(job.created_at).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
   return (
-    <div>
+    <div className="max-w-3xl">
       <Link
-        to={propSlug ? "/" : `/${orgSlug}`}
-        className="text-sm text-gray-500 hover:text-gray-900 mb-8 inline-block transition-colors"
+        to={backHref}
+        className={cn(
+          "inline-flex items-center gap-2 text-sm font-medium text-muted-foreground",
+          "hover:text-foreground transition-colors mb-8 group"
+        )}
       >
+        <ArrowLeft
+          className="size-4 transition-transform group-hover:-translate-x-0.5"
+          aria-hidden
+        />
         Back to all jobs
       </Link>
 
-      <div className="grid md:grid-cols-3 gap-8">
-        {/* Left column - Job details */}
-        <div className="md:col-span-2">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-3">
-            {job.title}
-          </h1>
-          <div className="flex flex-wrap gap-2 mb-8">
-            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
-              {EMPLOYMENT_TYPES[job.employment_type] || job.employment_type}
-            </span>
-            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
-              {WORK_ARRANGEMENTS[job.work_arrangement] || job.work_arrangement}
-            </span>
-            {job.location && (
-              <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
-                {job.location}
-              </span>
-            )}
-            {job.category && (
-              <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
-                {job.category}
-              </span>
-            )}
+      {/* Title, tags, Apply — metadata that was in the old sidebar is folded into tags + posted line */}
+      <header className="mb-10 pb-8 border-b border-border">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground text-balance">
+              {job.title}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 mt-4">
+              <Badge variant="secondary" className="font-normal">
+                {EMPLOYMENT_TYPES[job.employment_type] || job.employment_type}
+              </Badge>
+              <Badge variant="secondary" className="font-normal">
+                {WORK_ARRANGEMENTS[job.work_arrangement] || job.work_arrangement}
+              </Badge>
+              {job.location && (
+                <Badge variant="outline" className="font-normal">
+                  {job.location}
+                </Badge>
+              )}
+              {job.category && (
+                <Badge variant="outline" className="font-normal">
+                  {job.category}
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">Posted {postedLabel}</p>
           </div>
-
-          <div className="mb-6">
-            <p className="text-sm text-gray-500 whitespace-pre-wrap leading-relaxed">
-              {job.description}
-            </p>
-          </div>
-
-          {bulletSection("Responsibilities", job.responsibilities)}
-          {bulletSection("Requirements", job.requirements)}
-          {bulletSection("Nice to Have", job.nice_to_have)}
-          {bulletSection("Benefits", job.benefits)}
+          {!submitted && (
+            <Button
+              type="button"
+              size="lg"
+              className="shrink-0 w-full sm:w-auto"
+              onClick={scrollToApplication}
+            >
+              Apply for this role
+            </Button>
+          )}
         </div>
+      </header>
 
-        {/* Right sidebar */}
-        <div className="space-y-6">
-          {/* Job details card */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">
-              Job Details
-            </h3>
-            <div className="space-y-3 text-sm text-gray-500">
-              {job.location && <p>{job.location}</p>}
-              <p>{EMPLOYMENT_TYPES[job.employment_type] || job.employment_type}</p>
-              <p>{WORK_ARRANGEMENTS[job.work_arrangement] || job.work_arrangement}</p>
-              <p>
-                Posted{" "}
-                {new Date(job.created_at).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
-            </div>
-          </div>
+      {/* Job body */}
+      <section className="mb-12">
+        <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-muted-foreground">
+          {job.description}
+        </div>
+      </section>
 
-          {/* Application form */}
-          {submitted ? (
-            <div className="bg-white border border-gray-200 rounded-lg p-6 text-center">
-              <h3 className="text-sm font-medium text-gray-900 mb-1">
-                Application Submitted
-              </h3>
-              <p className="text-sm text-gray-500">
-                Thank you for applying. We'll review your application and get
-                back to you soon.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">
-                Apply for this position
-              </h3>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                  <Label htmlFor="first_name" className="text-xs mb-1">
-                    First Name *
-                  </Label>
-                  <Input
-                    id="first_name"
-                    name="first_name"
-                    required
-                    className="h-9 text-sm"
-                  />
+      {bulletSection("Responsibilities", job.responsibilities)}
+      {bulletSection("Requirements", job.requirements)}
+      {bulletSection("Nice to have", job.nice_to_have)}
+      {bulletSection("Benefits", job.benefits)}
+
+      {/* Application — bottom */}
+      <div ref={applicationRef} id="apply" className="scroll-mt-24 pt-4">
+        {submitted ? (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-lg">Application received</CardTitle>
+              <CardDescription>
+                Thank you for applying. We&apos;ll review your application and get back to you soon.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Apply for this position</CardTitle>
+              <CardDescription>
+                Submit your details and resume. Fields marked * are required.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="first_name">First name *</Label>
+                    <Input id="first_name" name="first_name" required className="h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="last_name">Last name *</Label>
+                    <Input id="last_name" name="last_name" required className="h-10" />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="last_name" className="text-xs mb-1">
-                    Last Name *
-                  </Label>
-                  <Input
-                    id="last_name"
-                    name="last_name"
-                    required
-                    className="h-9 text-sm"
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input id="email" name="email" type="email" required className="h-10" />
                 </div>
-                <div>
-                  <Label htmlFor="email" className="text-xs mb-1">
-                    Email *
-                  </Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    className="h-9 text-sm"
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input id="phone" name="phone" className="h-10" />
                 </div>
-                <div>
-                  <Label htmlFor="phone" className="text-xs mb-1">
-                    Phone
-                  </Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    className="h-9 text-sm"
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <Input id="location" name="location" className="h-10" />
                 </div>
-                <div>
-                  <Label htmlFor="location" className="text-xs mb-1">
-                    Location
-                  </Label>
-                  <Input
-                    id="location"
-                    name="location"
-                    className="h-9 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="linkedin_url" className="text-xs mb-1">
-                    LinkedIn URL
-                  </Label>
+                <div className="space-y-2">
+                  <Label htmlFor="linkedin_url">LinkedIn URL</Label>
                   <Input
                     id="linkedin_url"
                     name="linkedin_url"
-                    className="h-9 text-sm"
-                    placeholder="https://linkedin.com/in/..."
+                    className="h-10"
+                    placeholder="https://linkedin.com/in/…"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="portfolio_url" className="text-xs mb-1">
-                    Portfolio URL
-                  </Label>
+                <div className="space-y-2">
+                  <Label htmlFor="portfolio_url">Portfolio URL</Label>
                   <Input
                     id="portfolio_url"
                     name="portfolio_url"
-                    className="h-9 text-sm"
-                    placeholder="https://..."
+                    className="h-10"
+                    placeholder="https://…"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="resume" className="text-xs mb-1">
-                    Resume *
-                  </Label>
+                <div className="space-y-2">
+                  <Label htmlFor="resume">Resume *</Label>
                   <input
                     ref={fileInputRef}
                     type="file"
                     id="resume"
                     accept=".pdf,.docx,.doc,.txt"
                     className="hidden"
-                    onChange={(e) =>
-                      setSelectedFile(e.target.files?.[0] || null)
-                    }
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="border border-gray-200 text-gray-700 rounded-md h-9 px-4 text-sm w-full text-left"
+                    variant="outline"
+                    className="w-full justify-start font-normal h-auto min-h-10 py-2 px-3"
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    {selectedFile ? selectedFile.name : "Upload resume"}
-                  </button>
-                  <p className="text-xs text-gray-400 mt-1">
-                    PDF, DOCX, DOC, or TXT (max 10MB)
-                  </p>
+                    {selectedFile
+                      ? selectedFile.name
+                      : "Choose file — PDF, DOCX, DOC, or TXT (max 10MB)"}
+                  </Button>
                 </div>
-                <div>
-                  <Label htmlFor="cover_letter" className="text-xs mb-1">
-                    Cover Letter
-                  </Label>
+                <div className="space-y-2">
+                  <Label htmlFor="cover_letter">Cover letter</Label>
                   <Textarea
                     id="cover_letter"
                     name="cover_letter"
-                    rows={4}
-                    className="text-sm resize-none"
-                    placeholder="Tell us why you're a great fit..."
+                    rows={5}
+                    className="resize-y min-h-[120px]"
+                    placeholder="Tell us why you’re a great fit…"
                   />
                 </div>
-                <button
+                <Button
                   type="submit"
-                  className="bg-gray-900 text-white rounded-md h-9 px-4 text-sm w-full disabled:opacity-50"
+                  className="w-full sm:w-auto min-w-[200px]"
                   disabled={applyMutation.isPending}
                 >
-                  {applyMutation.isPending
-                    ? "Submitting..."
-                    : "Submit Application"}
-                </button>
+                  {applyMutation.isPending ? "Submitting…" : "Submit application"}
+                </Button>
               </form>
-            </div>
-          )}
-        </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

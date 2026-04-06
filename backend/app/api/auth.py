@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from datetime import datetime, timedelta
 import secrets
 from slowapi import Limiter
@@ -15,7 +15,12 @@ from app.core.security import (
     hash_password, verify_password,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
-from app.core.email import send_login_otp, send_email_verification, send_password_reset_otp
+from app.core.email import (
+    send_login_otp,
+    send_email_verification,
+    send_password_reset_otp,
+    send_email_change_verification,
+)
 from app.core.otp_rate_limit import enforce_otp_send_rate_limit
 from app.db.models.user import User
 from app.db.models.otp_code import OtpCode
@@ -28,6 +33,8 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     ChangePasswordRequest,
+    RequestEmailChangeRequest,
+    ConfirmEmailChangeRequest,
 )
 from fastapi.responses import JSONResponse
 
@@ -38,6 +45,25 @@ router = APIRouter(tags=["auth"])
 OTP_SEND_GENERIC_MESSAGE = (
     "If an account exists for this email, a verification code has been sent."
 )
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+EMAIL_CHANGE_DB_HINT = (
+    "Email change requires a database update. From the backend directory run: alembic upgrade head"
+)
+
+
+def _reraise_if_email_change_schema_error(exc: BaseException) -> None:
+    """Missing migration (otp_codes.user_id / email_change enum) surfaces as ProgrammingError."""
+    if not isinstance(exc, ProgrammingError):
+        return
+    raw = str(exc.orig) if getattr(exc, "orig", None) else str(exc)
+    low = raw.lower()
+    if "user_id" in raw or "email_change" in low or "otp_types" in low:
+        raise HTTPException(status_code=503, detail=EMAIL_CHANGE_DB_HINT) from exc
 
 
 def _create_auth_response(user: User, db: Session, request: Request) -> JSONResponse:
@@ -312,6 +338,174 @@ async def resend_verification_me(
 
     await send_email_verification(current_user.email, code)
     return {"message": "A new verification code has been sent to your email."}
+
+
+# -------------------------
+# Email change (authenticated)
+# -------------------------
+@limiter.limit(RateLimitConfig.get_rate("auth"))
+@router.post("/me/request-email-change")
+async def request_email_change_me(
+    request: Request,
+    payload: RequestEmailChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Send a 6-digit code to the new address. Requires the account password."""
+    new_email = _normalize_email(payload.new_email)
+    current_email = _normalize_email(current_user.email)
+
+    if new_email == current_email:
+        raise HTTPException(status_code=400, detail="That is already your email address")
+
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Password is incorrect")
+
+    taken = db.query(User).filter(User.email == new_email, User.id != user.id).first()
+    if taken:
+        raise HTTPException(status_code=400, detail="That email address is already in use")
+
+    enforce_otp_send_rate_limit(request, new_email)
+
+    try:
+        db.query(OtpCode).filter(
+            OtpCode.user_id == user.id,
+            OtpCode.code_type == "email_change",
+        ).delete(synchronize_session=False)
+
+        code = str(secrets.SystemRandom().randint(100000, 999999))
+        otp = OtpCode(
+            email=new_email,
+            code=code,
+            code_type="email_change",
+            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            user_id=user.id,
+        )
+        db.add(otp)
+        db.commit()
+
+        await send_email_change_verification(new_email, code)
+        return {"message": "We sent a verification code to the new email address."}
+    except ProgrammingError as e:
+        db.rollback()
+        _reraise_if_email_change_schema_error(e)
+        raise
+
+
+@limiter.limit(RateLimitConfig.get_rate("auth"))
+@router.post("/me/resend-email-change")
+async def resend_email_change_me(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Send a new code for the pending email change (must already have requested a change)."""
+    try:
+        pending = (
+            db.query(OtpCode)
+            .filter(
+                OtpCode.user_id == current_user.id,
+                OtpCode.code_type == "email_change",
+            )
+            .order_by(OtpCode.expires_at.desc())
+            .first()
+        )
+        if not pending:
+            raise HTTPException(
+                status_code=400,
+                detail="No pending email change. Start by entering a new address and your password.",
+            )
+
+        enforce_otp_send_rate_limit(request, pending.email)
+
+        target_email = pending.email
+        db.delete(pending)
+        db.flush()
+
+        code = str(secrets.SystemRandom().randint(100000, 999999))
+        otp = OtpCode(
+            email=target_email,
+            code=code,
+            code_type="email_change",
+            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            user_id=current_user.id,
+        )
+        db.add(otp)
+        db.commit()
+
+        await send_email_change_verification(target_email, code)
+        return {"message": "We sent a new verification code to that email address."}
+    except HTTPException:
+        raise
+    except ProgrammingError as e:
+        db.rollback()
+        _reraise_if_email_change_schema_error(e)
+        raise
+
+
+@limiter.limit(RateLimitConfig.get_rate("auth"))
+@router.post("/me/confirm-email-change")
+def confirm_email_change_me(
+    request: Request,
+    payload: ConfirmEmailChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Apply the new email after the user enters the code sent to that address."""
+    new_email = _normalize_email(payload.new_email)
+
+    try:
+        otp = (
+            db.query(OtpCode)
+            .filter(
+                OtpCode.email == new_email,
+                OtpCode.code == payload.code,
+                OtpCode.code_type == "email_change",
+                OtpCode.user_id == current_user.id,
+            )
+            .order_by(OtpCode.expires_at.desc())
+            .first()
+        )
+
+        if not otp or otp.expires_at < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+        taken = db.query(User).filter(User.email == new_email, User.id != current_user.id).first()
+        if taken:
+            db.delete(otp)
+            db.commit()
+            raise HTTPException(status_code=400, detail="That email address is already in use")
+
+        db.delete(otp)
+
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if not user:
+            db.commit()
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user.email = new_email
+        user.email_verified = True
+        db.commit()
+
+        revoke_all_user_refresh_tokens(user.id, db)
+
+        updated_user = (
+            db.query(User)
+            .options(joinedload(User.organization))
+            .filter(User.id == user.id)
+            .first()
+        )
+        return _create_auth_response(updated_user, db, request)
+    except HTTPException:
+        raise
+    except ProgrammingError as e:
+        db.rollback()
+        _reraise_if_email_change_schema_error(e)
+        raise
 
 
 # -------------------------

@@ -17,6 +17,7 @@ dist/
 build/
 .eggs/
 .venv/
+.script-venv/
 venv/
 env/
 *.whl
