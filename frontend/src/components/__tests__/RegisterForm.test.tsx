@@ -1,19 +1,27 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '@/test/utils'
 import { RegisterForm } from '../RegisterForm'
 
+const authMock = vi.hoisted(() => ({
+  register: vi.fn(),
+  isRegisterLoading: false,
+  error: null as string | null,
+}))
+
 // Mock useAuth hook
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({
-    register: vi.fn(),
-    isRegisterLoading: false,
-    error: null,
-  }),
+  useAuth: () => authMock,
 }))
 
 describe('RegisterForm', () => {
+  beforeEach(() => {
+    authMock.register.mockReset()
+    authMock.isRegisterLoading = false
+    authMock.error = null
+  })
+
   it('renders all form fields', () => {
     render(<RegisterForm />)
     
@@ -36,20 +44,12 @@ describe('RegisterForm', () => {
     await user.click(submitButton)
     
     await waitFor(() => {
-      expect(screen.getByText(/invalid email/i)).toBeInTheDocument()
+      expect(screen.getByText(/valid email address/i)).toBeInTheDocument()
       expect(screen.getByText(/password must be at least/i)).toBeInTheDocument()
     })
   })
 
   it('calls register function with correct data on valid submit', async () => {
-    const mockRegister = vi.fn()
-    
-    vi.mocked(vi.importMock('@/hooks/useAuth')).useAuth.mockReturnValue({
-      register: mockRegister,
-      isRegisterLoading: false,
-      error: null,
-    })
-    
     const user = userEvent.setup()
     render(<RegisterForm />)
     
@@ -62,7 +62,7 @@ describe('RegisterForm', () => {
     await user.click(submitButton)
     
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith({
+      expect(authMock.register).toHaveBeenCalledWith({
         email: 'test@example.com',
         password: 'ValidPass123!',
       })
@@ -70,11 +70,7 @@ describe('RegisterForm', () => {
   })
 
   it('shows loading state when submitting', () => {
-    vi.mocked(vi.importMock('@/hooks/useAuth')).useAuth.mockReturnValue({
-      register: vi.fn(),
-      isRegisterLoading: true,
-      error: null,
-    })
+    authMock.isRegisterLoading = true
     
     render(<RegisterForm />)
     
@@ -83,11 +79,7 @@ describe('RegisterForm', () => {
   })
 
   it('displays error message when registration fails', () => {
-    vi.mocked(vi.importMock('@/hooks/useAuth')).useAuth.mockReturnValue({
-      register: vi.fn(),
-      isRegisterLoading: false,
-      error: 'Email already registered',
-    })
+    authMock.error = 'Email already registered'
     
     render(<RegisterForm />)
     

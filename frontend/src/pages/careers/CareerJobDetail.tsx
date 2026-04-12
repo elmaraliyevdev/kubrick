@@ -1,6 +1,10 @@
 import { useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useCareerJobDetail, useApplyToJob } from "@/hooks/useCareers";
+import type {
+  ApplicationFormCustomField,
+  ApplicationFormStandardConfig,
+} from "@/types/career";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { JobDescriptionHtml } from "@/components/job-form/JobDescriptionHtml";
 
 const WORK_ARRANGEMENTS: Record<string, string> = {
   remote_only: "Remote Only",
@@ -29,6 +34,113 @@ const EMPLOYMENT_TYPES: Record<string, string> = {
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".doc", ".txt"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+const DEFAULT_FORM_CONFIG: ApplicationFormStandardConfig = {
+  show_phone: true,
+  show_location: true,
+  show_linkedin: true,
+  show_portfolio: true,
+  show_cover_letter: true,
+  require_phone: false,
+  require_location: false,
+  require_linkedin: false,
+  require_portfolio: false,
+  require_cover_letter: false,
+};
+
+function CustomApplyField({ field }: { field: ApplicationFormCustomField }) {
+  const name = `custom_${field.field_key}`;
+  const required = field.is_required;
+  const ph = field.placeholder || undefined;
+
+  switch (field.field_type) {
+    case "textarea":
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={name}>
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+          <Textarea id={name} name={name} required={required} rows={4} placeholder={ph} className="resize-y min-h-[100px]" />
+        </div>
+      );
+    case "number":
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={name}>
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+          <Input id={name} name={name} type="number" required={required} className="h-10" placeholder={ph} />
+        </div>
+      );
+    case "date":
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={name}>
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+          <Input id={name} name={name} type="date" required={required} className="h-10" />
+        </div>
+      );
+    case "checkbox":
+      return (
+        <div className="flex items-start gap-2">
+          <input id={name} name={name} type="checkbox" value="true" className="mt-1 size-4 rounded border-input" />
+          <Label htmlFor={name} className="text-sm font-normal leading-snug">
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+        </div>
+      );
+    case "select":
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={name}>
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+          <select
+            id={name}
+            name={name}
+            required={required}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            defaultValue=""
+          >
+            <option value="" disabled>
+              Select…
+            </option>
+            {(field.options || []).map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    case "url":
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={name}>
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+          <Input id={name} name={name} type="url" required={required} className="h-10" placeholder={ph || "https://"} />
+        </div>
+      );
+    default:
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={name}>
+            {field.label}
+            {required ? " *" : ""}
+          </Label>
+          <Input id={name} name={name} type="text" required={required} className="h-10" placeholder={ph} />
+        </div>
+      );
+  }
+}
+
 interface CareerJobDetailProps {
   orgSlug?: string;
 }
@@ -39,13 +151,20 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
     jobSlug: string;
   }>();
   const orgSlug = propSlug || paramOrgSlug;
-  const { data: job, isLoading, error } = useCareerJobDetail(orgSlug || "", jobSlug || "");
+  const { data, isLoading, error } = useCareerJobDetail(orgSlug || "", jobSlug || "");
   const applyMutation = useApplyToJob();
 
   const [submitted, setSubmitted] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const applicationRef = useRef<HTMLDivElement>(null);
+
+  const job = data?.job;
+  const formCfg: ApplicationFormStandardConfig = {
+    ...DEFAULT_FORM_CONFIG,
+    ...data?.application_form?.config,
+  };
+  const customFields = data?.application_form?.custom_fields ?? [];
 
   const scrollToApplication = () => {
     applicationRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -78,16 +197,49 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
     formData.append("last_name", (formElements.namedItem("last_name") as HTMLInputElement).value);
     formData.append("email", (formElements.namedItem("email") as HTMLInputElement).value);
 
-    const phone = (formElements.namedItem("phone") as HTMLInputElement).value;
-    if (phone) formData.append("phone", phone);
-    const location = (formElements.namedItem("location") as HTMLInputElement).value;
-    if (location) formData.append("location", location);
-    const linkedin = (formElements.namedItem("linkedin_url") as HTMLInputElement).value;
-    if (linkedin) formData.append("linkedin_url", linkedin);
-    const portfolio = (formElements.namedItem("portfolio_url") as HTMLInputElement).value;
-    if (portfolio) formData.append("portfolio_url", portfolio);
-    const coverLetter = (formElements.namedItem("cover_letter") as HTMLTextAreaElement).value;
-    if (coverLetter) formData.append("cover_letter", coverLetter);
+    if (formCfg.show_phone) {
+      const phone = (formElements.namedItem("phone") as HTMLInputElement)?.value;
+      if (phone) formData.append("phone", phone);
+    }
+    if (formCfg.show_location) {
+      const location = (formElements.namedItem("location") as HTMLInputElement)?.value;
+      if (location) formData.append("location", location);
+    }
+    if (formCfg.show_linkedin) {
+      const linkedin = (formElements.namedItem("linkedin_url") as HTMLInputElement)?.value;
+      if (linkedin) formData.append("linkedin_url", linkedin);
+    }
+    if (formCfg.show_portfolio) {
+      const portfolio = (formElements.namedItem("portfolio_url") as HTMLInputElement)?.value;
+      if (portfolio) formData.append("portfolio_url", portfolio);
+    }
+    if (formCfg.show_cover_letter) {
+      const coverLetter = (formElements.namedItem("cover_letter") as HTMLTextAreaElement)?.value;
+      if (coverLetter) formData.append("cover_letter", coverLetter);
+    }
+
+    const customPayload: Record<string, string | number | boolean> = {};
+    for (const f of customFields) {
+      const el = formElements.namedItem(`custom_${f.field_key}`) as
+        | HTMLInputElement
+        | HTMLTextAreaElement
+        | HTMLSelectElement
+        | null;
+      if (!el) continue;
+      if (f.field_type === "checkbox") {
+        const input = el as HTMLInputElement;
+        customPayload[f.field_key] = input.checked === true;
+      } else if (f.field_type === "number") {
+        const v = (el as HTMLInputElement).value;
+        if (v !== "") customPayload[f.field_key] = Number(v);
+      } else {
+        const v = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+        if (v !== "") customPayload[f.field_key] = v;
+      }
+    }
+    if (Object.keys(customPayload).length > 0) {
+      formData.append("custom_fields", JSON.stringify(customPayload));
+    }
 
     formData.append("resume", selectedFile);
 
@@ -185,7 +337,6 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
         Back to all jobs
       </Link>
 
-      {/* Title, tags, Apply — metadata that was in the old sidebar is folded into tags + posted line */}
       <header className="mb-10 pb-8 border-b border-border">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="min-w-0 flex-1">
@@ -225,11 +376,8 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
         </div>
       </header>
 
-      {/* Job body */}
       <section className="mb-12">
-        <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-muted-foreground">
-          {job.description}
-        </div>
+        <JobDescriptionHtml html={job.description} />
       </section>
 
       {bulletSection("Responsibilities", job.responsibilities)}
@@ -237,7 +385,6 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
       {bulletSection("Nice to have", job.nice_to_have)}
       {bulletSection("Benefits", job.benefits)}
 
-      {/* Application — bottom */}
       <div ref={applicationRef} id="apply" className="scroll-mt-24 pt-4">
         {submitted ? (
           <Card className="border-primary/20 bg-primary/5">
@@ -272,32 +419,50 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
                   <Label htmlFor="email">Email *</Label>
                   <Input id="email" name="email" type="email" required className="h-10" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input id="phone" name="phone" className="h-10" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input id="location" name="location" className="h-10" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="linkedin_url">LinkedIn URL</Label>
-                  <Input
-                    id="linkedin_url"
-                    name="linkedin_url"
-                    className="h-10"
-                    placeholder="https://linkedin.com/in/…"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="portfolio_url">Portfolio URL</Label>
-                  <Input
-                    id="portfolio_url"
-                    name="portfolio_url"
-                    className="h-10"
-                    placeholder="https://…"
-                  />
-                </div>
+                {formCfg.show_phone ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">
+                      Phone{formCfg.require_phone ? " *" : ""}
+                    </Label>
+                    <Input id="phone" name="phone" className="h-10" required={formCfg.require_phone} />
+                  </div>
+                ) : null}
+                {formCfg.show_location ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="location">
+                      Location{formCfg.require_location ? " *" : ""}
+                    </Label>
+                    <Input id="location" name="location" className="h-10" required={formCfg.require_location} />
+                  </div>
+                ) : null}
+                {formCfg.show_linkedin ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedin_url">
+                      LinkedIn URL{formCfg.require_linkedin ? " *" : ""}
+                    </Label>
+                    <Input
+                      id="linkedin_url"
+                      name="linkedin_url"
+                      className="h-10"
+                      placeholder="https://linkedin.com/in/…"
+                      required={formCfg.require_linkedin}
+                    />
+                  </div>
+                ) : null}
+                {formCfg.show_portfolio ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="portfolio_url">
+                      Portfolio URL{formCfg.require_portfolio ? " *" : ""}
+                    </Label>
+                    <Input
+                      id="portfolio_url"
+                      name="portfolio_url"
+                      className="h-10"
+                      placeholder="https://…"
+                      required={formCfg.require_portfolio}
+                    />
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <Label htmlFor="resume">Resume *</Label>
                   <input
@@ -319,16 +484,26 @@ export default function CareerJobDetail({ orgSlug: propSlug }: CareerJobDetailPr
                       : "Choose file — PDF, DOCX, DOC, or TXT (max 10MB)"}
                   </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cover_letter">Cover letter</Label>
-                  <Textarea
-                    id="cover_letter"
-                    name="cover_letter"
-                    rows={5}
-                    className="resize-y min-h-[120px]"
-                    placeholder="Tell us why you’re a great fit…"
-                  />
-                </div>
+                {formCfg.show_cover_letter ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="cover_letter">
+                      Cover letter{formCfg.require_cover_letter ? " *" : ""}
+                    </Label>
+                    <Textarea
+                      id="cover_letter"
+                      name="cover_letter"
+                      rows={5}
+                      className="resize-y min-h-[120px]"
+                      placeholder="Tell us why you’re a great fit…"
+                      required={formCfg.require_cover_letter}
+                    />
+                  </div>
+                ) : null}
+
+                {customFields.map((field) => (
+                  <CustomApplyField key={field.id} field={field} />
+                ))}
+
                 <Button
                   type="submit"
                   className="w-full sm:w-auto min-w-[200px]"

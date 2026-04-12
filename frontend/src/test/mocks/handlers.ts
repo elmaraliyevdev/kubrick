@@ -1,6 +1,10 @@
 import { http, HttpResponse } from 'msw'
 
-const API_BASE = 'http://127.0.0.1:8000/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const otpSendGenericMessage =
+  'If an account exists for this email, a verification code has been sent.'
+const mockAuthenticatedKey = '__mockAuthenticated'
+const mockNeedsProfileKey = '__mockNeedsProfile'
 
 export const handlers = [
   // Registration endpoint
@@ -14,6 +18,8 @@ export const handlers = [
       )
     }
     
+    globalThis.localStorage?.setItem(mockNeedsProfileKey, 'true')
+
     return HttpResponse.json({
       id: 1,
       email: body.email,
@@ -28,24 +34,64 @@ export const handlers = [
   http.post(`${API_BASE}/auth/verify-code`, async ({ request }) => {
     const body = await request.json() as { email: string; code: string }
     
-    if (body.code === 'invalid') {
+    if (body.code === '000000') {
       return HttpResponse.json(
         { detail: 'Invalid or expired code' },
         { status: 400 }
       )
     }
     
+    globalThis.localStorage?.setItem(mockAuthenticatedKey, 'true')
+
     return HttpResponse.json({
       access_token: 'mock-jwt-token',
       token_type: 'bearer'
     })
   }),
 
+  http.get(`${API_BASE}/auth/me`, ({ request }) => {
+    const authHeader = request.headers.get('Authorization')
+
+    const hasMockSession = globalThis.localStorage?.getItem(mockAuthenticatedKey) === 'true'
+
+    if (!authHeader && !request.headers.get('cookie')?.includes('access_token') && !hasMockSession) {
+      return HttpResponse.json(
+        { detail: 'Not authenticated' },
+        { status: 401 }
+      )
+    }
+
+    const pendingEmail = globalThis.localStorage?.getItem('pendingVerificationEmail')
+    const needsProfile = globalThis.localStorage?.getItem(mockNeedsProfileKey) === 'true'
+
+    return HttpResponse.json({
+      id: 1,
+      email: pendingEmail || 'test@example.com',
+      first_name: pendingEmail || needsProfile ? null : 'Test',
+      last_name: pendingEmail || needsProfile ? null : 'User',
+      organization: pendingEmail || needsProfile
+        ? null
+        : {
+            id: 1,
+            name: 'Test Corp',
+            slug: 'test-corp',
+          },
+      email_verified: true,
+      role: 'admin',
+      is_active: true,
+    })
+  }),
+
+  http.post(`${API_BASE}/auth/refresh`, () => {
+    return HttpResponse.json({}, { status: 204 })
+  }),
+
   // Complete profile endpoint
   http.post(`${API_BASE}/auth/complete-profile`, async ({ request }) => {
     const authHeader = request.headers.get('Authorization')
+    const hasMockSession = globalThis.localStorage?.getItem(mockAuthenticatedKey) === 'true'
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if ((!authHeader || !authHeader.startsWith('Bearer ')) && !hasMockSession) {
       return HttpResponse.json(
         { detail: 'Not authenticated' },
         { status: 401 }
@@ -58,15 +104,41 @@ export const handlers = [
       organization_name: string
     }
     
+    globalThis.localStorage?.setItem(mockNeedsProfileKey, 'false')
+
     return HttpResponse.json({
       id: 1,
       email: 'test@example.com',
       first_name: body.first_name,
       last_name: body.last_name,
+      email_verified: true,
+      role: 'admin',
+      is_active: true,
       organization: {
         id: 1,
-        name: body.organization_name
+        name: body.organization_name,
+        slug: 'test-corp',
       }
+    })
+  }),
+
+  http.get(`${API_BASE}/dashboard/stats`, () => {
+    return HttpResponse.json({
+      total_candidates: 0,
+      total_jobs: 0,
+      active_jobs: 0,
+      total_matches: 0,
+      avg_match_score: 0,
+    })
+  }),
+
+  http.get(`${API_BASE}/candidates/`, () => {
+    return HttpResponse.json({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      pages: 0,
     })
   }),
 
@@ -81,14 +153,14 @@ export const handlers = [
       )
     }
     
+    globalThis.localStorage?.setItem(mockAuthenticatedKey, 'true')
+    globalThis.localStorage?.setItem(mockNeedsProfileKey, 'false')
+
     return HttpResponse.json({
       access_token: 'mock-jwt-token',
       token_type: 'bearer'
     })
   }),
-
-  const otpSendGenericMessage =
-    'If an account exists for this email, a verification code has been sent.'
 
   // Request OTP endpoint (generic response — anti-enumeration)
   http.post(`${API_BASE}/auth/request-code`, async () => {

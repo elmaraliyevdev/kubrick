@@ -1,283 +1,367 @@
-# Kubrick Documentation
+# Kubrick Application Documentation
 
-Kubrick is an AI-powered resume scanner & candidate ranking platform.
+Kubrick is an AI-assisted recruiting platform for organizations that need to publish jobs, collect applications, parse resumes, manage candidates, run candidate-to-job matching, and move applicants through a hiring pipeline.
 
-This repository contains three main parts:
-- `backend/` - FastAPI API (auth, jobs, candidates, matching, files, public career pages)
-- `frontend/` - React SPA dashboard (protected recruiter UI)
-- `landing/` - Next.js marketing site
+This page is the current high-level documentation for the repository. It is intended as a single handoff page for product behavior, architecture, runtime setup, security posture, and the main code locations.
 
----
+## Repository Map
 
-## System Overview
+- `backend/`: FastAPI API, SQLAlchemy models, Alembic migrations, resume/job parsers, matching services, tests, and backend scripts.
+- `frontend/`: Vite + React + TypeScript app for the recruiter dashboard and public career pages.
+- `deploy/`: Nginx, systemd, setup, and deployment scripts for production-style hosting.
+- `docs/`: Application documentation, including this overview and CSRF/auth notes.
+- `test-all.sh`: Combined backend and frontend test runner.
 
-### Backend (FastAPI)
-- Provides REST endpoints under `/api/*`
-- Uses:
-  - JWT + httpOnly cookies for auth
-  - Refresh token rotation for session continuity
-  - Rate limiting via `slowapi`
-  - SQLAlchemy + Alembic + PostgreSQL
-  - Resume parsing with an LLM strategy and a regex fallback
+## Product Surface
 
-### Security (CSRF and cookies)
+Kubrick has two frontend modes:
 
-Cookie-based auth needs an explicit **CSRF posture** when the SPA and API are not strictly same-site, or when using `SameSite=None`. See:
+- Dashboard app: authenticated recruiter/admin workspace at normal app hosts such as `localhost` or `app.kubrick.app`.
+- Public career app: unauthenticated organization career pages selected by subdomain, such as `{orgSlug}.kubrick.app`, or by path fallback `/{orgSlug}`.
 
-- **[CSRF and cookie-based authentication](./CSRF-and-auth.md)** — SameSite/CORS behavior, current mitigations, and hardening options (double-submit token, Bearer-only access, etc.).
+Core user-facing flows:
 
-### Authorization (organization / tenant scoping)
+- Authentication and profile onboarding: registration, email verification, password login, OTP login, password reset, email change verification, logout, and profile completion.
+- Organization management: profile/branding, logo upload, organization users, invites, career page settings, application form settings, and matching configuration.
+- Job management: create, edit, list, view, close/draft/open jobs, maintain slug/category/work arrangement/employment metadata, write structured bullet sections, and parse requirements.
+- Candidate management: create/edit/delete candidates, upload resumes, bulk upload resumes, view parsed work/education/skills data, and inspect candidate detail.
+- Matching and ranking: parse job requirements, calculate candidate-job match scores, view ranked candidates, inspect match details, see skill gaps, and tune matching weights.
+- Pipeline: view job-specific or global hiring pipeline lanes, add eligible candidates as applicants, and move applications through stages.
+- Public career pages: display organization branding and public jobs, resolve effective application form settings, accept applications with resume uploads, and create candidate/application records.
 
-B2B routes must not scope data only by “authenticated user” when queries filter on `organization_id`: if `organization_id` is `NULL` on the user, comparisons can match unintended rows. Org-scoped endpoints use **`require_org_member`** (`backend/app/core/security.py`) so the user must have an **`organization_id`** before any tenant-filtered query runs. **`GET /api/dashboard/stats`** and **`/api/auth/*` profile** endpoints intentionally use **`get_current_user`** only (e.g. users still completing onboarding). Role checks (`admin` vs `recruiter`) remain on top of org membership where applicable.
+## Backend Architecture
 
-### Frontend (React)
-- Uses React Router with two “modes”:
-  - Dashboard app (protected): `frontend/src/MainApp.tsx`
-  - Public career pages (subdomain-driven): `frontend/src/CareerApp.tsx`
-- Session validation:
-  - `frontend/src/components/ProtectedRoute.tsx` calls `GET /api/auth/me`
-  - `frontend/src/utils/api.ts` auto-refreshes on `401` via `POST /api/auth/refresh`
+The backend is a FastAPI application in `backend/app/main.py`.
 
-### Public Career Pages (subdomain-based)
-- `frontend/src/utils/subdomain.ts` extracts `{orgSlug}` from the hostname:
-  - Production: `{orgSlug}.kubrick.app`
-  - Dev: `{orgSlug}.localhost`
-- When detected, the React app renders the public career experience (no auth UI).
+Runtime responsibilities:
 
----
+- Loads `.env` before app construction.
+- Configures JSON/plain logging from `LOG_LEVEL` and `LOG_FORMAT`.
+- Adds rate limiting with `slowapi`.
+- Adds proxy, CORS, security, and request-size middleware.
+- Mounts uploaded files at `/uploads`.
+- Wires API routers under `/api/*`, with health checks exposed at `/health*`.
 
-## Prerequisites
+Main backend packages:
 
-### Local development
-- Node.js (for `frontend/` and optional `landing/`)
-- Python (for `backend/`)
-- A running PostgreSQL database (or configure your own)
-- Required env vars (see below)
+- `backend/app/api/`: REST routers.
+- `backend/app/core/`: auth, RBAC, validation, file security, email, logging, exceptions, password and OTP helpers.
+- `backend/app/db/models/`: SQLAlchemy entities and relationships.
+- `backend/app/schemas/`: Pydantic request/response schemas.
+- `backend/app/services/`: candidate matching, job description parsing, LLM resume parsing, application form resolution, and match scoring.
+- `backend/alembic/versions/`: schema migrations.
 
----
+Important services:
 
-## Configuration (Environment Variables)
+- `LLMResumeParser`: extracts structured resume data using OpenAI-compatible chat completions with strategy selection for simple, detailed, multilingual, and technical resumes.
+- `JobDescriptionParser`: extracts required skills, nice-to-have skills, experience, education, location, and primary skills from job descriptions.
+- `MatchScoreCalculator`: calculates weighted match scores from skills, experience, education, and additional factors; supports synonym, fuzzy, TF-IDF, and primary-skill penalties.
+- `CandidateMatchingService`: manages candidate-job match persistence, recalculation, ranked candidates, and organization-specific matching config.
+- `application_form_resolution`: merges organization default form config with per-job overrides for public applications.
 
-### Backend
-- Example: `backend/.env.example`
-- Key variables:
-  - `DATABASE_URL`
-  - `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`
-  - `RESEND_API_KEY`, `FROM_EMAIL`
-  - `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, `OPENAI_TIMEOUT`
-  - `RESUME_PARSER_STRATEGY` (e.g. `llm_with_fallback`)
-  - `ALLOWED_ORIGINS`, `RATE_LIMIT_*`, `LOG_LEVEL`, `LOG_FORMAT`
+## Frontend Architecture
 
-### Frontend
-- Example: `frontend/.env.example`
-- Key variable:
-  - `VITE_API_URL` (default expected: `http://localhost:8000/api`)
+The frontend is a Vite + React + TypeScript app in `frontend/`.
 
----
+Key entrypoints:
 
-## How to Run Locally
+- `frontend/src/App.tsx`: detects a career subdomain and chooses the app shell.
+- `frontend/src/MainApp.tsx`: dashboard, auth, settings, legal pages, and path-based career fallback.
+- `frontend/src/CareerApp.tsx`: minimal public career page shell for subdomain career pages.
+- `frontend/src/utils/api.ts`: authenticated API client and refresh handling.
+- `frontend/src/utils/publicApi.ts`: public career API client.
+- `frontend/src/components/ProtectedRoute.tsx`: session validation and protected routing.
 
-### 1) Backend (FastAPI)
-From repo root:
-1. Create `backend/.env` from `backend/.env.example`
-2. Run:
-   - `cd backend`
-   - `./run.sh`
+Main dashboard routes:
 
-This starts Uvicorn on `http://localhost:8000`.
+- `/dashboard`: overview.
+- `/jobs`: job list.
+- `/jobs/new`: job creation.
+- `/jobs/:jobId`: job detail, matching, applicants, and form settings.
+- `/pipeline`: hiring pipeline.
+- `/candidates`: candidate list.
+- `/candidates/:candidateId`: candidate detail.
+- `/settings/profile`: user profile.
+- `/settings/organization`: organization profile, branding, and team settings.
+- `/settings/career-page`: public career page and application form settings.
+- `/settings/matching`: matching algorithm configuration.
 
-### 2) Frontend (React)
-1. Create `frontend/.env` from `frontend/.env.example`
-2. Run:
-   - `cd frontend`
-   - `npm ci`
-   - `npm run dev`
+Public and auth routes:
 
-This starts Vite (typically on `http://localhost:5173`).
+- `/register`, `/signup`, `/login`, `/verify-email`, `/forgot-password`, `/reset-password`.
+- `/privacy`, `/terms`.
+- `/{orgSlug}` and `/{orgSlug}/{jobSlug}` as non-subdomain public career fallback.
 
-### 3) Optional Landing (Next.js)
-1. `cd landing`
-2. `npm ci`
-3. `npm run dev`
+Frontend state/data patterns:
 
----
+- React Query powers most server state hooks in `frontend/src/hooks/`.
+- Redux slices exist for auth/jobs in `frontend/src/store/`.
+- UI components are primarily local shadcn/Radix-style components under `frontend/src/components/ui/`.
+- Dashboard layouts live in `frontend/src/layouts/`.
 
-## Main User Flows
+## Data Model
 
-### Auth flow (dashboard app)
-1. Register: `POST /api/auth/register`
-2. Verify email (OTP):
-   - `POST /api/auth/request-code`
-   - `POST /api/auth/verify-code`
-   - `POST /api/auth/resend-verification`
-3. Login:
-   - Password login: `POST /api/auth/login-password`
-   - OTP login: request + verify code
-4. Session refresh:
-   - Frontend calls `POST /api/auth/refresh` when access token expires
-5. Protected navigation:
-   - `GET /api/auth/me` validates the session on route mount
-6. Profile completion redirect:
-   - `ProtectedRoute` ensures users complete required profile fields
+Primary tenant boundary:
 
-### Recruiter dashboard
-1. Dashboard overview
-   - `GET /api/dashboard/stats`
-2. Jobs
-   - List/create/update/delete:
-     - `GET /api/jobs/`, `POST /api/jobs/`, `GET|PUT|DELETE /api/jobs/{job_id}`
-   - Parse job requirements via AI:
-     - `POST /api/jobs/{job_id}/parse-requirements`
-3. Candidate management
-   - List/create/update/delete:
-     - `GET /api/candidates/`, `POST /api/candidates/`, `GET|PUT|DELETE /api/candidates/{candidate_id}`
-   - Resume upload and parsing:
-     - `POST /api/files/upload-resume-create-candidate`
-     - `POST /api/files/upload-resume/{candidate_id}`
-4. Matching / ranking
-   - Calculate matches for a job:
-     - `POST /api/jobs/{job_id}/calculate-matches`
-   - Ranked shortlist:
-     - `GET /api/jobs/{job_id}/ranked-candidates`
-   - Per-candidate job matches and recalculation:
-     - `GET /api/candidates/{candidate_id}/job-matches`
-     - `POST /api/candidates/{candidate_id}/recalculate-matches`
-   - Match details:
-     - `GET /api/matches/{candidate_id}/{job_id}`
-     - `GET /api/matches/{candidate_id}/{job_id}/skills-gap`
+- `Organization`: owns users, jobs, candidates, invites, matching config, application form config, and custom form fields.
+- `User`: belongs to an organization and has role/status/profile/auth metadata.
 
-### Public career pages + applications
-1. Public job list and details:
-   - `GET /api/careers/{org_slug}`
-   - `GET /api/careers/{org_slug}/{job_slug}`
-2. Submit an application:
-   - `POST /api/careers/{org_slug}/{job_slug}/apply`
-3. The backend may:
-   - create a candidate from the application
-   - parse the uploaded resume (LLM + fallback)
-   - notify recruiters/candidate via email (Resend)
+Recruiting entities:
 
----
+- `Job`: belongs to an organization and owner; stores job metadata, public slug, description, structured bullet sections, status, work arrangement, and matching-related fields.
+- `Candidate`: belongs to an organization; stores contact info, parsed resume data, notes, resume files, work experiences, job applications, and match records.
+- `JobApplication`: connects one candidate to one job with a unique candidate/job pair, pipeline status, match score summary fields, cover letter, custom field responses, and recruiter notes.
+- `CandidateJobMatch`: persisted detailed score record for a candidate/job pair.
+- `JobRequirement`: parsed structured requirements for a job.
+- `ApplicationFormConfig`, `CustomFormField`, `JobApplicationFormSettings`: organization defaults and per-job overrides for public application forms.
+- `MatchingAlgorithmConfig`: organization-specific scoring weights and algorithm settings.
+- `CandidateFile`: uploaded resume/file metadata.
+- `Invite`, `RefreshToken`, `OTPCode`, `TokenBlacklist`: collaboration and authentication support tables.
 
-## Backend API Endpoint Map (Quick Reference)
+Pipeline stages currently use: `applied`, `screening`, `interview`, `offer`, `hired`.
 
-Base prefixes:
-- API: `/api/*`
-- Health: `/health*` (no `/api` prefix)
-- Uploaded files served from: `/uploads/*`
+## API Map
 
-### Health
+Base URL is configured in the frontend as `VITE_API_URL`, typically `http://localhost:8000/api`.
+
+Health:
+
 - `GET /health`
 - `GET /health/detailed`
 - `GET /health/ready`
 - `GET /health/live`
 
-### Auth (`/api/auth`)
-- `POST /api/auth/register`
-- `POST /api/auth/complete-profile`
-- `POST /api/auth/login-password`
-- `POST /api/auth/request-code`
-- `POST /api/auth/resend-verification`
-- `POST /api/auth/verify-code`
-- `POST /api/auth/refresh`
-- `GET /api/auth/me`
-- `PUT /api/auth/me`
-- `POST /api/auth/logout`
-- `POST /api/auth/forgot-password`
-- `POST /api/auth/reset-password`
+Auth (`/api/auth`):
 
-### Dashboard (`/api/dashboard`)
+- `POST /register`
+- `POST /complete-profile`
+- `POST /login-password`
+- `POST /request-code`
+- `POST /resend-verification`
+- `POST /verify-code`
+- `POST /refresh`
+- `POST /me/resend-verification`
+- `POST /me/request-email-change`
+- `POST /me/resend-email-change`
+- `POST /me/confirm-email-change`
+- `POST /me/change-password`
+- `GET /me`
+- `PUT /me`
+- `POST /logout`
+- `POST /forgot-password`
+- `POST /reset-password`
+
+Organizations (`/api/organizations`):
+
+- `GET /me`
+- `PUT /me`
+- `POST /me/logo`
+- `DELETE /me/logo`
+- `GET /me/users`
+- `PATCH /me/users/{user_id}`
+- `POST /me/invite`
+
+Application form defaults (`/api/organizations/me/application-form`):
+
+- `GET /`
+- `PUT /config`
+- `POST /fields`
+- `PUT /fields/{field_id}`
+- `DELETE /fields/{field_id}`
+- `PUT /fields/reorder`
+
+Matching config (`/api/organizations/me/matching-config`):
+
+- `GET /`
+- `PUT /`
+
+Jobs (`/api/jobs`):
+
+- `GET /`
+- `POST /`
+- `GET /{job_id}`
+- `PUT /{job_id}`
+- `DELETE /{job_id}`
+- `GET /{job_id}/application-form`
+- `PUT /{job_id}/application-form`
+- `POST /{job_id}/parse-requirements`
+- `GET /{job_id}/requirements`
+- `PUT /{job_id}/requirements`
+- `POST /{job_id}/calculate-matches`
+- `GET /{job_id}/ranked-candidates`
+- `POST /{job_id}/bulk-score`
+
+Candidates (`/api/candidates`):
+
+- `GET /`
+- `POST /`
+- `GET /{candidate_id}`
+- `PUT /{candidate_id}`
+- `DELETE /{candidate_id}`
+- `GET /{candidate_id}/job-matches`
+- `POST /{candidate_id}/recalculate-matches`
+
+Pipeline and job applications:
+
+- `GET /api/jobs/{job_id}/pipeline`
+- `GET /api/jobs/{job_id}/pipeline/eligible-candidates`
+- `POST /api/jobs/{job_id}/pipeline/applicants`
+- `GET /api/pipeline`
+- `PATCH /api/job-applications/{application_id}/stage`
+
+Matches (`/api/matches`):
+
+- `GET /{candidate_id}/{job_id}`
+- `GET /{candidate_id}/{job_id}/skills-gap`
+- `POST /{candidate_id}/{job_id}/recalculate`
+- `GET /statistics/{organization_id}`
+
+Files (`/api/files`):
+
+- `GET /download/{file_id}`
+- `POST /upload-resume-create-candidate`
+- `POST /upload-resume/{candidate_id}`
+- `POST /bulk-upload-resumes`
+
+Dashboard:
+
 - `GET /api/dashboard/stats`
 
-### Organizations (`/api/organizations`)
-- `GET /api/organizations/me`
-- `PUT /api/organizations/me`
-- `POST /api/organizations/me/logo`
-- `DELETE /api/organizations/me/logo`
-- `GET /api/organizations/me/users`
-- `POST /api/organizations/me/invite`
+Public careers (`/api/careers`):
 
-### Jobs (`/api/jobs`)
-- `GET /api/jobs/`
-- `POST /api/jobs/`
-- `GET /api/jobs/{job_id}`
-- `PUT /api/jobs/{job_id}`
-- `DELETE /api/jobs/{job_id}`
-- `POST /api/jobs/{job_id}/parse-requirements`
-- `GET /api/jobs/{job_id}/requirements`
-- `PUT /api/jobs/{job_id}/requirements`
-- `POST /api/jobs/{job_id}/calculate-matches`
-- `GET /api/jobs/{job_id}/ranked-candidates`
-- `POST /api/jobs/{job_id}/bulk-score`
+- `GET /{org_slug}`
+- `GET /{org_slug}/{job_slug}`
+- `POST /{org_slug}/{job_slug}/apply`
 
-### Candidates (`/api/candidates`)
-- `GET /api/candidates/`
-- `POST /api/candidates/`
-- `GET /api/candidates/{candidate_id}`
-- `PUT /api/candidates/{candidate_id}`
-- `DELETE /api/candidates/{candidate_id}`
-- `GET /api/candidates/{candidate_id}/job-matches`
-- `POST /api/candidates/{candidate_id}/recalculate-matches`
+## Authentication, Authorization, and Security
 
-### Matches (`/api/matches`)
-- `GET /api/matches/{candidate_id}/{job_id}`
-- `GET /api/matches/{candidate_id}/{job_id}/skills-gap`
-- `POST /api/matches/{candidate_id}/{job_id}/recalculate`
-- `GET /api/matches/statistics/{organization_id}`
+Authentication uses short-lived JWT access tokens plus refresh-token rotation through httpOnly cookies. The frontend checks the current session with `GET /api/auth/me`; the API client refreshes via `POST /api/auth/refresh` on expired access.
 
-### Files (`/api/files`)
-- `GET /api/files/download/{file_id}`
-- `POST /api/files/upload-resume-create-candidate`
-- `POST /api/files/upload-resume/{candidate_id}`
-- `POST /api/files/bulk-upload-resumes`
+Security controls present in code:
 
-### Application Form Config (`/api/organizations/me/application-form`)
-- `GET /api/organizations/me/application-form`
-- `PUT /api/organizations/me/application-form/config`
-- `POST /api/organizations/me/application-form/fields`
-- `PUT /api/organizations/me/application-form/fields/{field_id}`
-- `DELETE /api/organizations/me/application-form/fields/{field_id}`
-- `PUT /api/organizations/me/application-form/fields/reorder`
+- Password hashing and password-change flow in `backend/app/core/password_security.py` and `backend/app/api/auth.py`.
+- OTP flows and rate limiting for verification, login, password reset, and email changes.
+- Refresh-token persistence and token blacklist support.
+- `SecurityMiddleware` and `RequestSizeMiddleware`, with a 50 MB request-size default in `backend/app/main.py`.
+- File upload validation in `backend/app/core/file_security.py`.
+- CORS allowlist plus subdomain regex support for career pages.
+- Organization/tenant scoping via `require_org_member` for B2B routes where tenant isolation matters.
+- RBAC helpers for admin/recruiter-style checks.
 
-### Public Career Pages (`/api/careers`)
-- `GET /api/careers/{org_slug}`
-- `GET /api/careers/{org_slug}/{job_slug}`
-- `POST /api/careers/{org_slug}/{job_slug}/apply`
+CSRF note: because auth uses cookies, SameSite and CORS settings matter. See `docs/CSRF-and-auth.md` for the current posture and hardening options.
 
----
+## Configuration
 
-## Resume Parsing (LLM + Fallback)
+Backend config is copied from `backend/.env.example` to `backend/.env`.
 
-The resume parsing system is documented here:
-- `backend/docs/llm_parser_guide.md`
+Key backend variables:
 
-Important configuration:
-- `RESUME_PARSER_STRATEGY`
+- `DATABASE_URL`: PostgreSQL connection string.
+- `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`: JWT settings.
+- `RESEND_API_KEY`, `FROM_EMAIL`: email delivery.
+- `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, `OPENAI_TIMEOUT`: LLM parsing.
+- `RESUME_PARSER_STRATEGY`: parser strategy, commonly `llm_with_fallback`.
+- `ENVIRONMENT`, `DEBUG`, `ALLOWED_ORIGINS`.
+- `AUTH_COOKIE_DOMAIN`, `AUTH_COOKIE_SAMESITE`: cookie scope and SameSite behavior.
+- `RATE_LIMIT_ENABLED`, `RATE_LIMIT_DEFAULT`.
+- `LOG_LEVEL`, `LOG_FORMAT`.
 
----
+Frontend config is copied from `frontend/.env.example` to `frontend/.env`.
 
-## Where to Look in Code
+Key frontend variable:
 
-Backend
-- API wiring + middleware: `backend/app/main.py`
-- Routers: `backend/app/api/*`
-- Resume parser docs: `backend/docs/llm_parser_guide.md`
+- `VITE_API_URL`: API base URL with `/api` suffix, for example `http://localhost:8000/api`.
 
-Frontend
-- Routing:
-  - `frontend/src/App.tsx` (subdomain detection)
-  - `frontend/src/MainApp.tsx` (dashboard app)
-  - `frontend/src/CareerApp.tsx` (public career app)
-- Session/auth logic:
-  - `frontend/src/components/ProtectedRoute.tsx`
-  - `frontend/src/utils/api.ts`
+## Local Development
 
----
+Backend:
 
-## Next Improvements (Optional Docs)
+```bash
+cd backend
+./run.sh
+```
 
-If you want, I can also generate:
-- `docs/API-Schemas.md` (request/response examples per endpoint)
-- `docs/Data-Model.md` (SQLAlchemy models + relationships)
-- `docs/Deployment-Runbook.md` (production steps using `deploy/`)
+`backend/run.sh` expects a virtual environment at `backend/.venv` and starts Uvicorn on `http://localhost:8000`.
 
+Frontend:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Vite usually starts on `http://localhost:5173`.
+
+Database:
+
+- Configure PostgreSQL via `DATABASE_URL`.
+- Apply schema migrations with Alembic from `backend/` when needed.
+- The repository also contains helper scripts such as `backend/scripts/seed_realistic_data.py` and `backend/scripts/delete_user_by_email.py`.
+
+## Testing
+
+Run everything:
+
+```bash
+./test-all.sh
+```
+
+Backend only:
+
+```bash
+cd backend
+./test.sh
+```
+
+The backend test script installs `backend/test_requirements.txt`, runs `pytest tests/`, generates coverage in `backend/htmlcov/`, and enforces 80 percent coverage.
+
+Frontend only:
+
+```bash
+cd frontend
+npm test -- --run
+```
+
+Other frontend scripts:
+
+- `npm run build`
+- `npm run lint`
+- `npm run preview`
+- `npm run test:coverage`
+
+## Deployment
+
+Deployment artifacts live in `deploy/`:
+
+- `deploy/setup.sh`: server/bootstrap setup.
+- `deploy/deploy.sh`: deployment workflow.
+- `deploy/nginx/kubrick.conf`: Nginx site config.
+- `deploy/kubrick-api.service`: systemd service for the API.
+
+Production deployment needs coordinated frontend/API origins, HTTPS, cookie settings, `ALLOWED_ORIGINS`, database credentials, email credentials, and OpenAI credentials.
+
+## Current Implementation Notes
+
+- This checkout has no `landing/` directory, so the active documented apps are the FastAPI backend and Vite/React frontend.
+- Public career pages are supported through both subdomain detection and path fallback.
+- Job application forms can be organization-wide defaults or per-job custom settings.
+- Matching requires parsed job requirements before useful candidate/job scoring can be persisted.
+- Uploaded assets and resumes are served from `/uploads` on the API process.
+
+## Where to Start in Code
+
+- Backend app setup: `backend/app/main.py`
+- Backend routers: `backend/app/api/`
+- Backend models: `backend/app/db/models/`
+- Matching logic: `backend/app/services/candidate_matching_service.py` and `backend/app/services/match_score_calculator.py`
+- Resume parsing: `backend/app/services/llm_resume_parser.py`
+- Job parsing: `backend/app/services/job_description_parser.py`
+- Application form resolution: `backend/app/services/application_form_resolution.py`
+- Frontend routing: `frontend/src/App.tsx`, `frontend/src/MainApp.tsx`, `frontend/src/CareerApp.tsx`
+- Auth/session client behavior: `frontend/src/components/ProtectedRoute.tsx`, `frontend/src/utils/api.ts`
+- Public career API client: `frontend/src/utils/publicApi.ts`
+- Pipeline UI: `frontend/src/pages/Pipeline.tsx`, `frontend/src/components/PipelineBoard.tsx`
+- Job UI: `frontend/src/pages/Jobs.tsx`, `frontend/src/pages/JobDetail.tsx`, `frontend/src/pages/CreateJob.tsx`
+- Candidate UI: `frontend/src/pages/Candidates.tsx`, `frontend/src/pages/CandidateDetail.tsx`
+- Settings UI: `frontend/src/pages/settings/`

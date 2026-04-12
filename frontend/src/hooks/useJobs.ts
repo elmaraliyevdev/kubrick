@@ -1,6 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/utils/api'
-import type { Job, JobCreate, JobUpdate } from '@/types/job'
+import type {
+  Job,
+  JobCreate,
+  JobUpdate,
+  JobApplicationFormPut,
+  JobApplicationFormSettingsDTO,
+} from '@/types/job'
 
 // Fetch all jobs
 export const useJobs = () => {
@@ -66,6 +72,37 @@ export const useDeleteJob = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+}
+
+export const useJobApplicationForm = (jobId: number) => {
+  return useQuery({
+    queryKey: ['jobs', jobId, 'application-form'],
+    queryFn: async (): Promise<JobApplicationFormSettingsDTO> => {
+      const response = await api.get(`/jobs/${jobId}/application-form`)
+      return response.data
+    },
+    enabled: !!jobId,
+  })
+}
+
+export const useUpdateJobApplicationForm = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      jobId,
+      payload,
+    }: {
+      jobId: number
+      payload: JobApplicationFormPut
+    }): Promise<JobApplicationFormSettingsDTO> => {
+      const response = await api.put(`/jobs/${jobId}/application-form`, payload)
+      return response.data
+    },
+    onSuccess: (_, { jobId }) => {
+      queryClient.invalidateQueries({ queryKey: ['jobs', jobId, 'application-form'] })
     },
   })
 }

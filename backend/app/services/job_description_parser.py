@@ -399,8 +399,9 @@ class JobDescriptionParser:
         """
         Main method to parse a job description and extract all structured requirements
         """
-        # Combine job details with description for more context
-        full_text = f"{job_title} {job_description} {job_location} {employment_type} {experience_level}"
+        # Combine job details with description for more context (strip HTML from rich-text descriptions)
+        desc_plain = re.sub(r"<[^>]+>", " ", job_description or "")
+        full_text = f"{job_title} {desc_plain} {job_location} {employment_type} {experience_level}"
         
         # Preprocess text
         processed_text = self.preprocess_text(full_text)

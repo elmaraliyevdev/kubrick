@@ -6,12 +6,10 @@ import { useNavigate } from "react-router-dom";
 
 export function VerifyEmailForm() {
   const navigate = useNavigate();
-  const { requestOTP, verifyOTP, isOTPLoading, error } = useAuth();
+  const { verifyOTP, isOTPLoading, error } = useAuth();
   const [email, setEmail] = useState<string>("");
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
-
-  console.log(requestOTP);
 
   useEffect(() => {
     const pendingEmail = localStorage.getItem("pendingVerificationEmail");

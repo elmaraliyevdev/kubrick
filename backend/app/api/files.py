@@ -12,6 +12,7 @@ from app.db.models.work_experience import WorkExperience
 from app.db.models.candidate import Candidate
 from app.db.models.candidate_file import CandidateFile
 from app.core.security import get_db, require_org_member
+from app.core.file_security import FileSecurityValidator, FileValidationError
 from app.db.models.user import User
 from app.services.llm_resume_parser import LLMResumeParser, RegexResumeParser, ParsingConfig
 
@@ -125,6 +126,39 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.doc', '.txt'}
 
+
+def validate_uploaded_file_content(
+    file_content: bytes,
+    filename: str,
+    *,
+    allowed_extensions: set[str],
+    max_size: int,
+    size_error: str,
+) -> tuple[str, str]:
+    """Validate uploaded content and return (sanitized_filename, file_ext)."""
+    try:
+        _, sanitized_filename = FileSecurityValidator.validate_filename(filename)
+        file_ext = Path(sanitized_filename).suffix.lower()
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File type {file_ext} not supported. Allowed: {', '.join(allowed_extensions)}",
+            )
+        if len(file_content) > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=size_error,
+            )
+        FileSecurityValidator.validate_file_type(file_content, sanitized_filename)
+        FileSecurityValidator.scan_for_malware_signatures(file_content)
+    except FileValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return sanitized_filename, file_ext
+
 @router.get("/download/{file_id}")
 def download_file(
     file_id: int,
@@ -222,25 +256,19 @@ async def upload_resume_create_candidate(
             detail="No file provided"
         )
 
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type {file_ext} not supported. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
-
-    # Read and validate file size
     file_content = await file.read()
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB"
-        )
+    sanitized_filename, file_ext = validate_uploaded_file_content(
+        file_content,
+        file.filename,
+        allowed_extensions=ALLOWED_EXTENSIONS,
+        max_size=MAX_FILE_SIZE,
+        size_error=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+    )
 
     try:
         # Parse resume first
         parser = get_resume_parser()
-        parsed_data = await parser.parse_resume(file_content, file.filename)
+        parsed_data = await parser.parse_resume(file_content, sanitized_filename)
 
         # Debug logging
         logger.info(f"Parse result keys: {list(parsed_data.keys())}")
@@ -316,7 +344,7 @@ async def upload_resume_create_candidate(
 
         # Generate unique filename and save file
         file_id = str(uuid.uuid4())
-        file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        file_path = UPLOAD_DIR / f"{file_id}_{sanitized_filename}"
 
         async with aiofiles.open(file_path, 'wb') as f:
             await f.write(file_content)
@@ -324,7 +352,7 @@ async def upload_resume_create_candidate(
         # Create file record
         candidate_file = CandidateFile(
             candidate_id=candidate.id,
-            filename=file.filename,
+            filename=sanitized_filename,
             file_path=str(file_path),
             file_type=file_ext[1:],  # Remove the dot
             file_size=len(file_content),
@@ -430,24 +458,18 @@ async def upload_resume(
             detail="No file provided"
         )
 
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type {file_ext} not supported. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
-
-    # Read and validate file size
     file_content = await file.read()
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB"
-        )
+    sanitized_filename, file_ext = validate_uploaded_file_content(
+        file_content,
+        file.filename,
+        allowed_extensions=ALLOWED_EXTENSIONS,
+        max_size=MAX_FILE_SIZE,
+        size_error=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+    )
 
     # Generate unique filename
     file_id = str(uuid.uuid4())
-    file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+    file_path = UPLOAD_DIR / f"{file_id}_{sanitized_filename}"
 
     try:
         # Save file
@@ -456,7 +478,7 @@ async def upload_resume(
 
         # Parse resume
         parser = get_resume_parser()
-        parsed_data = await parser.parse_resume(file_content, file.filename)
+        parsed_data = await parser.parse_resume(file_content, sanitized_filename)
 
         # Handle LLM parser result structure
         personal_info = parsed_data.get("personal_info", {})
@@ -522,7 +544,7 @@ async def upload_resume(
         # Create file record
         candidate_file = CandidateFile(
             candidate_id=candidate_id,
-            filename=file.filename,
+            filename=sanitized_filename,
             file_path=str(file_path),
             file_type=file_ext[1:],  # Remove the dot
             file_size=len(file_content),
@@ -615,27 +637,26 @@ async def bulk_upload_resumes(
                 })
                 continue
 
-            file_ext = Path(file.filename).suffix.lower()
-            if file_ext not in ALLOWED_EXTENSIONS:
-                results.append({
-                    "filename": file.filename,
-                    "success": False,
-                    "error": f"File type {file_ext} not supported"
-                })
-                continue
-
             file_content = await file.read()
-            if len(file_content) > MAX_FILE_SIZE:
+            try:
+                sanitized_filename, file_ext = validate_uploaded_file_content(
+                    file_content,
+                    file.filename,
+                    allowed_extensions=ALLOWED_EXTENSIONS,
+                    max_size=MAX_FILE_SIZE,
+                    size_error="File too large",
+                )
+            except HTTPException as exc:
                 results.append({
                     "filename": file.filename,
                     "success": False,
-                    "error": "File too large"
+                    "error": exc.detail,
                 })
                 continue
 
             # Parse resume
             parser = get_resume_parser()
-            parsed_data = await parser.parse_resume(file_content, file.filename)
+            parsed_data = await parser.parse_resume(file_content, sanitized_filename)
 
             if auto_create_candidates:
                 # Handle LLM parser result structure
@@ -691,7 +712,7 @@ async def bulk_upload_resumes(
 
                 # Save file
                 file_id = str(uuid.uuid4())
-                file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+                file_path = UPLOAD_DIR / f"{file_id}_{sanitized_filename}"
 
                 async with aiofiles.open(file_path, 'wb') as f:
                     await f.write(file_content)
@@ -699,7 +720,7 @@ async def bulk_upload_resumes(
                 # Create file record
                 candidate_file = CandidateFile(
                     candidate_id=candidate.id,
-                    filename=file.filename,
+                    filename=sanitized_filename,
                     file_path=str(file_path),
                     file_type=file_ext[1:],
                     file_size=len(file_content),

@@ -52,6 +52,22 @@ class TestRefreshEndpoint:
         response = client.post("/api/auth/refresh")
         assert response.status_code == 401
 
+    def test_refresh_for_inactive_user_revokes_token(
+        self, auth_client, db_session, test_user
+    ):
+        refresh_cookie = auth_client.cookies.get("refresh_token")
+        test_user.is_active = False
+        db_session.commit()
+
+        response = auth_client.post("/api/auth/refresh")
+
+        assert response.status_code == 401
+        rt = db_session.query(RefreshToken).filter(
+            RefreshToken.token == refresh_cookie,
+        ).first()
+        assert rt is not None
+        assert rt.is_active is False
+
 
 class TestLogout:
     def test_logout_revokes_refresh_token(self, auth_client, db_session, test_user):

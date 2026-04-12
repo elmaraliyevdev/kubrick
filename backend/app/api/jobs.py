@@ -8,7 +8,19 @@ from app.db.session import SessionLocal
 from app.db.models.job import Job
 from app.db.models.job_requirement import JobRequirement
 from app.db.models.job_application import JobApplication
+from app.db.models.job_application_form_settings import JobApplicationFormSettings
+from app.db.models.custom_form_field import CustomFormField
 from app.schemas.job import JobCreate, JobResponse, JobUpdate
+from app.schemas.job_application_form import (
+    JobApplicationFormSettingsResponse,
+    JobApplicationFormSettingsPut,
+    ResolvedApplicationForm,
+)
+from app.schemas.public_careers import PublicCustomFieldResponse
+from app.services.application_form_resolution import (
+    get_org_application_form,
+    resolve_application_form_for_job,
+)
 from app.core.security import get_db, require_org_member
 from app.db.models.user import User
 from app.services.job_description_parser import JobDescriptionParser
@@ -68,6 +80,7 @@ def create_job(
         work_arrangement=job.work_arrangement,
         status=job.status,
         category=job.category,
+        experience_level=job.experience_level,
         user_id=current_user.id,
         organization_id=current_user.organization_id,
     )
@@ -185,6 +198,116 @@ def delete_job(
     db.commit()
     
     return None
+
+
+def _job_application_form_response(
+    job_id: int, organization_id: int, db: Session
+) -> JobApplicationFormSettingsResponse:
+    settings = (
+        db.query(JobApplicationFormSettings)
+        .filter(JobApplicationFormSettings.job_id == job_id)
+        .first()
+    )
+    eff_cfg, eff_fields, uses_org = resolve_application_form_for_job(job_id, organization_id, db)
+    _, org_all_fields = get_org_application_form(organization_id, db)
+
+    return JobApplicationFormSettingsResponse(
+        use_organization_defaults=settings.use_organization_defaults if settings else True,
+        resolved=ResolvedApplicationForm(
+            config=eff_cfg,
+            custom_fields=[PublicCustomFieldResponse.model_validate(f) for f in eff_fields],
+        ),
+        organization_custom_fields=[PublicCustomFieldResponse.model_validate(f) for f in org_all_fields],
+        standard_config=settings.standard_config if settings and not settings.use_organization_defaults else None,
+        custom_field_ids=list(settings.custom_field_ids)
+        if settings
+        and not settings.use_organization_defaults
+        and settings.custom_field_ids is not None
+        else None,
+    )
+
+
+@router.get("/{job_id}/application-form", response_model=JobApplicationFormSettingsResponse)
+def get_job_application_form(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+):
+    job = (
+        db.query(Job)
+        .filter(Job.id == job_id, Job.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    return _job_application_form_response(job.id, current_user.organization_id, db)
+
+
+@router.put("/{job_id}/application-form", response_model=JobApplicationFormSettingsResponse)
+def put_job_application_form(
+    job_id: int,
+    payload: JobApplicationFormSettingsPut,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can configure job application forms")
+
+    job = (
+        db.query(Job)
+        .filter(Job.id == job_id, Job.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    org_id = current_user.organization_id
+
+    if payload.use_organization_defaults:
+        existing = (
+            db.query(JobApplicationFormSettings)
+            .filter(JobApplicationFormSettings.job_id == job_id)
+            .first()
+        )
+        if existing:
+            db.delete(existing)
+        db.commit()
+        return _job_application_form_response(job.id, org_id, db)
+
+    if payload.standard_config is None or payload.custom_field_ids is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="standard_config and custom_field_ids are required when overriding the form",
+        )
+
+    valid_ids = {
+        r[0]
+        for r in db.query(CustomFormField.id)
+        .filter(CustomFormField.organization_id == org_id)
+        .all()
+    }
+    for fid in payload.custom_field_ids:
+        if fid not in valid_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom field id {fid} does not belong to this organization",
+            )
+
+    row = (
+        db.query(JobApplicationFormSettings)
+        .filter(JobApplicationFormSettings.job_id == job_id)
+        .first()
+    )
+    if not row:
+        row = JobApplicationFormSettings(job_id=job_id)
+        db.add(row)
+
+    row.use_organization_defaults = False
+    row.standard_config = payload.standard_config.model_dump()
+    row.custom_field_ids = list(payload.custom_field_ids)
+    db.commit()
+
+    return _job_application_form_response(job.id, org_id, db)
 
 
 # Initialize job description parser

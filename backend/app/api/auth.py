@@ -68,6 +68,9 @@ def _reraise_if_email_change_schema_error(exc: BaseException) -> None:
 
 def _create_auth_response(user: User, db: Session, request: Request) -> JSONResponse:
     """Create a JSON response with access + refresh token cookies set."""
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
     access_token = create_access_token(data={"sub": user.email})
     refresh_token = create_refresh_token(
         user_id=user.id,
@@ -192,7 +195,7 @@ def complete_profile(
 @router.post("/login-password")
 def login_password(request: Request, payload: LoginPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
+    if not user or not user.is_active or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return _create_auth_response(user, db, request)
@@ -208,7 +211,7 @@ async def request_code(request: Request, payload: RequestCodeRequest, db: Sessio
     generic = {"message": OTP_SEND_GENERIC_MESSAGE}
 
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user:
+    if not user or not user.is_active:
         return generic
 
     code = str(secrets.SystemRandom().randint(100000, 999999))
@@ -237,7 +240,7 @@ async def resend_verification(request: Request, payload: RequestCodeRequest, db:
     generic = {"message": OTP_SEND_GENERIC_MESSAGE}
 
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or user.email_verified:
+    if not user or not user.is_active or user.email_verified:
         return generic
 
     code = str(secrets.SystemRandom().randint(100000, 999999))
@@ -277,6 +280,8 @@ def verify_code(request: Request, payload: VerifyCodeRequest, db: Session = Depe
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired code")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     if otp_code_type == "email_verification":
         if user.email_verified:
@@ -304,6 +309,9 @@ def refresh_token_endpoint(request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == rt.user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    if not user.is_active:
+        revoke_refresh_token(token, db)
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     # Rotate: revoke the old refresh token and issue a new pair
     revoke_refresh_token(token, db)

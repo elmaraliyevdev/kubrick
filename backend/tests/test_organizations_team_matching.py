@@ -54,6 +54,15 @@ def test_matching_config_get_put(auth_client, db_session):
     assert put_res.json()["skills_weight"] == 35
 
 
+def test_matching_statistics_route(auth_client, test_organization):
+    res = auth_client.get(f"/api/matches/statistics/{test_organization.id}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["organization_id"] == test_organization.id
+    assert body["total_matches"] == 0
+    assert body["completion_rate"] == 0.0
+
+
 def test_change_password(auth_client, test_user, db_session):
     res = auth_client.post(
         "/api/auth/me/change-password",

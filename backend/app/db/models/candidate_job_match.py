@@ -1,9 +1,11 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Numeric, UniqueConstraint, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 from datetime import datetime
 from typing import Dict, Any, Optional
+
+JsonMatchData = JSON().with_variant(JSONB, "postgresql")
 
 
 class CandidateJobMatch(Base):
@@ -34,12 +36,12 @@ class CandidateJobMatch(Base):
     additional_score = Column(Numeric(5, 2), nullable=True)  # 0.00 - 20.00
 
     # Detailed skill analysis
-    skills_matched = Column(JSONB, nullable=True)  # ["Python", "React"] - exact/fuzzy matches
-    skills_missing = Column(JSONB, nullable=True)  # ["Docker", "Kubernetes"] - required but missing
-    skills_extra = Column(JSONB, nullable=True)  # ["Ruby", "Vue.js"] - candidate has but not required
+    skills_matched = Column(JsonMatchData, nullable=True)  # ["Python", "React"] - exact/fuzzy matches
+    skills_missing = Column(JsonMatchData, nullable=True)  # ["Docker", "Kubernetes"] - required but missing
+    skills_extra = Column(JsonMatchData, nullable=True)  # ["Ruby", "Vue.js"] - candidate has but not required
 
     # Detailed match analysis
-    match_details = Column(JSONB, nullable=True)  # Full analysis breakdown
+    match_details = Column(JsonMatchData, nullable=True)  # Full analysis breakdown
 
     # Metadata
     calculated_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)

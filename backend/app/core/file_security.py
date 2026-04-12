@@ -2,7 +2,11 @@
 File upload security and validation utilities.
 """
 import os
-import magic
+import mimetypes
+try:
+    import magic
+except ImportError:  # pragma: no cover - depends on host libmagic installation
+    magic = None
 import hashlib
 import tempfile
 from typing import List, Tuple, Optional, Dict, Any
@@ -108,11 +112,13 @@ class FileSecurityValidator:
         ext = Path(filename).suffix.lower()
         
         # Use python-magic to detect MIME type from content
-        try:
-            detected_mime = magic.from_buffer(file_content, mime=True)
-        except Exception:
-            # Fallback if magic fails
-            detected_mime = 'application/octet-stream'
+        if magic is not None:
+            try:
+                detected_mime = magic.from_buffer(file_content, mime=True)
+            except Exception:
+                detected_mime = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        else:
+            detected_mime = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
         
         # Check if detected MIME type is allowed
         if detected_mime not in ALLOWED_MIME_TYPES:

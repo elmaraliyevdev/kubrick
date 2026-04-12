@@ -67,6 +67,7 @@ class PublicFormConfigResponse(BaseModel):
 
 
 class PublicCustomFieldResponse(BaseModel):
+    id: int
     field_key: str
     label: str
     field_type: str

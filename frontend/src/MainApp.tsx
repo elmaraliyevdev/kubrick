@@ -5,6 +5,7 @@ import CandidateDetail from "@/pages/CandidateDetail";
 import Candidates from "@/pages/Candidates";
 import CompleteProfile from "@/pages/CompleteProfile";
 import ForgotPassword from "@/pages/ForgotPassword";
+import CreateJob from "@/pages/CreateJob";
 import JobDetail from "@/pages/JobDetail";
 import Jobs from "@/pages/Jobs";
 import Login from "@/pages/Login";
@@ -65,6 +66,7 @@ export default function MainApp() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="jobs" element={<Jobs />} />
+          <Route path="jobs/new" element={<CreateJob />} />
           <Route path="jobs/:jobId" element={<JobDetail />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="candidates" element={<Candidates />} />

@@ -28,6 +28,7 @@ export function RegisterForm({ className, ...props }: React.ComponentProps<"form
     <form
       onSubmit={handleSubmit(onSubmit)}
       className={cn("flex flex-col gap-6", className)}
+      noValidate
       {...props}
     >
       <div className="flex flex-col items-center gap-2 text-center">

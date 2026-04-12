@@ -26,6 +26,7 @@ from .refresh_token import RefreshToken
 # Import career page models
 from .application_form_config import ApplicationFormConfig
 from .custom_form_field import CustomFormField
+from .job_application_form_settings import JobApplicationFormSettings
 
 # Make them available for import
 __all__ = [
@@ -45,4 +46,5 @@ __all__ = [
     "RefreshToken",
     "ApplicationFormConfig",
     "CustomFormField",
+    "JobApplicationFormSettings",
 ]

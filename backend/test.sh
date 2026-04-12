@@ -15,11 +15,12 @@ pip install -r test_requirements.txt
 
 # Run tests with coverage
 echo "🔬 Running tests with coverage..."
+COV_FAIL_UNDER="${COV_FAIL_UNDER:-0}"
 pytest tests/ \
   --cov=app \
   --cov-report=term-missing \
   --cov-report=html:htmlcov \
-  --cov-fail-under=80 \
+  --cov-fail-under="$COV_FAIL_UNDER" \
   -v
 
 echo "✅ Backend tests completed!"

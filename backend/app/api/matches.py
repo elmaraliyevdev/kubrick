@@ -12,6 +12,33 @@ from app.services.candidate_matching_service import CandidateMatchingService
 router = APIRouter()
 
 
+@router.get("/statistics/{organization_id}")
+def get_matching_statistics(
+    organization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+) -> Dict[str, Any]:
+    """Get matching statistics for an organization (admin only)"""
+    # Path must match the authenticated tenant (do not trust client-supplied org id alone)
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+
+    try:
+        matching_service = CandidateMatchingService(db)
+        stats = matching_service.get_matching_statistics(organization_id)
+
+        return stats
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get statistics: {str(e)}"
+        )
+
+
 @router.get("/{candidate_id}/{job_id}")
 def get_detailed_match_analysis(
     candidate_id: int,
@@ -195,31 +222,4 @@ async def recalculate_single_match(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to recalculate match: {str(e)}"
-        )
-
-
-@router.get("/statistics/{organization_id}")
-def get_matching_statistics(
-    organization_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_org_member),
-) -> Dict[str, Any]:
-    """Get matching statistics for an organization (admin only)"""
-    # Path must match the authenticated tenant (do not trust client-supplied org id alone)
-    if current_user.organization_id != organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
-    
-    try:
-        matching_service = CandidateMatchingService(db)
-        stats = matching_service.get_matching_statistics(organization_id)
-        
-        return stats
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get statistics: {str(e)}"
         )

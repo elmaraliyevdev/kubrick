@@ -18,9 +18,6 @@ export function DashboardHeader() {
       <SidebarTrigger className="-ml-1" />
       <Breadcrumb>
         <BreadcrumbList>
-          <BreadcrumbItem className="hidden md:block">
-            <BreadcrumbLink href="/dashboard">Kubrick</BreadcrumbLink>
-          </BreadcrumbItem>
           {breadcrumbs.map((crumb, index) => (
             <React.Fragment key={index}>
               <BreadcrumbSeparator className="hidden md:block" />

@@ -2,7 +2,7 @@ import publicApi from "@/utils/publicApi";
 import type {
   CareerPageResponse,
   CareerPageFilters,
-  PublicJobDetail,
+  CareerJobDetailApiResponse,
   JobApplicationResponse,
 } from "@/types/career";
 
@@ -23,10 +23,9 @@ export const getCareerPage = async (
 export const getJobDetail = async (
   orgSlug: string,
   jobSlug: string
-): Promise<PublicJobDetail> => {
+): Promise<CareerJobDetailApiResponse> => {
   const { data } = await publicApi.get(`/careers/${orgSlug}/${jobSlug}`);
-  // API returns { job: {...}, application_form: {...} } — unwrap
-  return data.job || data;
+  return data as CareerJobDetailApiResponse;
 };
 
 export const applyToJob = async (

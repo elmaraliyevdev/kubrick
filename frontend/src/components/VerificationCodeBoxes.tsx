@@ -66,6 +66,7 @@ export function VerificationCodeBoxes({
             inputRefs.current[index] = el;
           }}
           type="text"
+          aria-label={`Verification code digit ${index + 1}`}
           inputMode="numeric"
           autoComplete={index === 0 ? "one-time-code" : "off"}
           maxLength={1}

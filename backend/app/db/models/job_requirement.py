@@ -1,8 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 from datetime import datetime
+
+JsonList = JSON().with_variant(JSONB, "postgresql")
 
 
 class JobRequirement(Base):
@@ -18,17 +20,17 @@ class JobRequirement(Base):
     )
 
     # Skills and requirements (stored as JSON arrays)
-    required_skills = Column(JSONB, nullable=True)  # ["Python", "React", "SQL"]
-    nice_to_have_skills = Column(JSONB, nullable=True)  # ["Docker", "AWS", "GraphQL"]
-    primary_skills = Column(JSONB, nullable=True)  # ["PHP", "Laravel"] - core skills defining the role
+    required_skills = Column(JsonList, nullable=True)  # ["Python", "React", "SQL"]
+    nice_to_have_skills = Column(JsonList, nullable=True)  # ["Docker", "AWS", "GraphQL"]
+    primary_skills = Column(JsonList, nullable=True)  # ["PHP", "Laravel"] - core skills defining the role
 
     # Experience requirements
     min_experience_years = Column(Integer, nullable=True)
     max_experience_years = Column(Integer, nullable=True)
 
     # Other requirements
-    education_requirements = Column(JSONB, nullable=True)  # ["Bachelor in CS", "Master preferred"]
-    location_requirements = Column(JSONB, nullable=True)  # ["Remote OK", "US timezone"]
+    education_requirements = Column(JsonList, nullable=True)  # ["Bachelor in CS", "Master preferred"]
+    location_requirements = Column(JsonList, nullable=True)  # ["Remote OK", "US timezone"]
 
     # Metadata
     parsed_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)

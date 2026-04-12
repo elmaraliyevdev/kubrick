@@ -18,6 +18,7 @@ from app.schemas.organization import (
 from app.schemas.user import UserResponse
 from app.schemas.invite import InviteResponse
 from app.core.security import get_db, require_org_member
+from app.core.file_security import FileSecurityValidator, FileValidationError
 from app.core.email import send_invite_email
 
 router = APIRouter()
@@ -25,7 +26,7 @@ router = APIRouter()
 LOGO_UPLOAD_DIR = Path("uploads/logos")
 LOGO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
-ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.webp'}
+ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 
 
 # Get current user's org
@@ -89,16 +90,25 @@ async def upload_logo(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in ALLOWED_LOGO_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type {file_ext} not supported. Allowed: {', '.join(ALLOWED_LOGO_EXTENSIONS)}"
-        )
-
     file_content = await file.read()
     if len(file_content) > MAX_LOGO_SIZE:
         raise HTTPException(status_code=413, detail="Logo too large. Maximum size: 2MB")
+
+    try:
+        _, sanitized_filename = FileSecurityValidator.validate_filename(file.filename)
+        file_ext = Path(sanitized_filename).suffix.lower()
+        if file_ext not in ALLOWED_LOGO_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type {file_ext} not supported. Allowed: {', '.join(ALLOWED_LOGO_EXTENSIONS)}"
+            )
+        _, mime_type = FileSecurityValidator.validate_file_type(file_content, sanitized_filename)
+        if not mime_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Logo must be an image")
+        FileSecurityValidator.validate_image_content(file_content)
+        FileSecurityValidator.scan_for_malware_signatures(file_content)
+    except FileValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Delete old logo if exists
     if org.logo_url:

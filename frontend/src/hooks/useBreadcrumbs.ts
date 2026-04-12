@@ -12,14 +12,21 @@ export function useBreadcrumbs(): Breadcrumb[] {
   const params = useParams<{ jobId: string; candidateId: string }>();
   const pathname = location.pathname;
 
-  const jobId = params.jobId ? parseInt(params.jobId) : 0;
+  if (pathname === "/jobs/new") {
+    return [
+      { label: "Jobs", href: "/jobs" },
+      { label: "New job" },
+    ];
+  }
+
+  const jobId = params.jobId ? parseInt(params.jobId, 10) : 0;
   const candidateId = params.candidateId ? parseInt(params.candidateId) : 0;
 
   const { data: job } = useJob(jobId);
   const { data: candidate } = useCandidate(candidateId);
 
-  // Job detail: Jobs > Job Title
-  if (pathname.startsWith("/jobs/") && jobId) {
+  // Job detail: Jobs > Job Title (skip numeric check failed for non-numeric segments)
+  if (pathname.startsWith("/jobs/") && jobId && !Number.isNaN(jobId)) {
     return [
       { label: "Jobs", href: "/jobs" },
       { label: job?.title || "Job Details" },
@@ -60,7 +67,6 @@ export function useBreadcrumbs(): Breadcrumb[] {
     "/dashboard": [{ label: "Dashboard" }],
     "/jobs": [{ label: "Jobs" }],
     "/candidates": [{ label: "Candidates" }],
-    "/analytics": [{ label: "Analytics" }],
   };
 
   return routeMap[pathname] || [{ label: "Dashboard" }];

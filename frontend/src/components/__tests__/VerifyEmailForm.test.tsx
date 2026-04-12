@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '@/test/utils'
 import { VerifyEmailForm } from '../VerifyEmailForm'
 
 const mockNavigate = vi.fn()
+const authMock = vi.hoisted(() => ({
+  requestOTP: vi.fn(),
+  verifyOTP: vi.fn(),
+  isOTPLoading: false,
+  error: null as string | null,
+}))
 
 // Mock react-router-dom
 vi.mock('react-router-dom', async () => {
@@ -15,20 +21,18 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-// Mock useAuth hook
-const mockVerifyOTP = vi.fn()
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({
-    verifyOTP: mockVerifyOTP,
-    isOTPLoading: false,
-    error: null,
-  }),
+  useAuth: () => authMock,
 }))
 
 describe('VerifyEmailForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    authMock.requestOTP.mockReset()
+    authMock.verifyOTP.mockReset()
+    authMock.isOTPLoading = false
+    authMock.error = null
   })
 
   it('redirects to register if no pending email', () => {
@@ -59,7 +63,7 @@ describe('VerifyEmailForm', () => {
     await user.type(codeInput, '123456')
     await user.click(submitButton)
     
-    expect(mockVerifyOTP).toHaveBeenCalledWith({
+    expect(authMock.verifyOTP).toHaveBeenCalledWith({
       email: 'test@example.com',
       code: '123456',
     })
@@ -68,11 +72,7 @@ describe('VerifyEmailForm', () => {
   it('shows error message', () => {
     localStorage.setItem('pendingVerificationEmail', 'test@example.com')
     
-    vi.mocked(vi.importMock('@/hooks/useAuth')).useAuth.mockReturnValue({
-      verifyOTP: mockVerifyOTP,
-      isOTPLoading: false,
-      error: 'Invalid code',
-    })
+    authMock.error = 'Invalid code'
     
     render(<VerifyEmailForm />)
     
@@ -82,11 +82,7 @@ describe('VerifyEmailForm', () => {
   it('shows loading state', () => {
     localStorage.setItem('pendingVerificationEmail', 'test@example.com')
     
-    vi.mocked(vi.importMock('@/hooks/useAuth')).useAuth.mockReturnValue({
-      verifyOTP: mockVerifyOTP,
-      isOTPLoading: true,
-      error: null,
-    })
+    authMock.isOTPLoading = true
     
     render(<VerifyEmailForm />)
     
@@ -110,7 +106,7 @@ describe('VerifyEmailForm', () => {
     await user.click(resendButton)
     
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:8000/api/auth/resend-verification',
+      `${import.meta.env.VITE_API_URL}/auth/resend-verification`,
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -67,8 +67,10 @@ echo "  Service installed (not started — run deploy.sh first)"
 
 # 7. SSL (run after DNS is pointed to this server)
 echo "[7/7] SSL setup..."
-echo "  After pointing DNS A records for app.kubrick.app and api.kubrick.app to this server, run:"
-echo "  sudo certbot --nginx -d app.kubrick.app -d api.kubrick.app -d kubrick.app"
+echo "  After pointing DNS A records for kubrick.app, app.kubrick.app, api.kubrick.app, and wildcard *.kubrick.app to this server, run:"
+echo "  sudo certbot --nginx -d kubrick.app -d app.kubrick.app -d api.kubrick.app"
+echo "  For public career subdomains, issue a wildcard certificate with DNS challenge:"
+echo "  sudo certbot certonly --manual --preferred-challenges dns -d \"*.kubrick.app\" -d kubrick.app"
 
 echo ""
 echo "=== Setup complete ==="

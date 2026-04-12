@@ -146,6 +146,38 @@ def create_custom_field(
     return field
 
 
+@router.put("/fields/reorder", response_model=List[CustomFormFieldResponse])
+def reorder_custom_fields(
+    payload: ReorderFieldsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_org_member),
+):
+    """Reorder custom fields by providing an ordered list of field IDs."""
+    _require_email_verified(current_user)
+    _require_admin(current_user)
+
+    fields = (
+        db.query(CustomFormField)
+        .filter(
+            CustomFormField.organization_id == current_user.organization_id,
+            CustomFormField.id.in_(payload.field_ids),
+        )
+        .all()
+    )
+
+    field_map = {f.id: f for f in fields}
+
+    for index, field_id in enumerate(payload.field_ids):
+        if field_id in field_map:
+            field_map[field_id].sort_order = index
+
+    db.commit()
+
+    # Return in new order
+    ordered = sorted(fields, key=lambda f: f.sort_order)
+    return [CustomFormFieldResponse.model_validate(f) for f in ordered]
+
+
 @router.put("/fields/{field_id}", response_model=CustomFormFieldResponse)
 def update_custom_field(
     field_id: int,
@@ -209,35 +241,3 @@ def delete_custom_field(
 
     db.delete(field)
     db.commit()
-
-
-@router.put("/fields/reorder", response_model=List[CustomFormFieldResponse])
-def reorder_custom_fields(
-    payload: ReorderFieldsRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_org_member),
-):
-    """Reorder custom fields by providing an ordered list of field IDs."""
-    _require_email_verified(current_user)
-    _require_admin(current_user)
-
-    fields = (
-        db.query(CustomFormField)
-        .filter(
-            CustomFormField.organization_id == current_user.organization_id,
-            CustomFormField.id.in_(payload.field_ids),
-        )
-        .all()
-    )
-
-    field_map = {f.id: f for f in fields}
-
-    for index, field_id in enumerate(payload.field_ids):
-        if field_id in field_map:
-            field_map[field_id].sort_order = index
-
-    db.commit()
-
-    # Return in new order
-    ordered = sorted(fields, key=lambda f: f.sort_order)
-    return [CustomFormFieldResponse.model_validate(f) for f in ordered]

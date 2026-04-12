@@ -122,13 +122,9 @@ class VerifyCodeRequest(BaseModel):
     @field_validator('code')
     @classmethod
     def validate_code(cls, v):
-        # Sanitize input first
         v = InputSanitizer.sanitize_text(v)
-        
-        if len(v) != 6:
-            raise ValueError('Verification code must be 6 digits')
-        if not v.isdigit():
-            raise ValueError('Verification code must contain only numbers')
+        if not v or len(v) > 32:
+            raise ValueError('Invalid verification code')
         return v
 
 
@@ -146,10 +142,8 @@ class RequestEmailChangeRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters long")
-        if len(v) > 128:
-            raise ValueError("Password too long")
+        if not v or len(v) > 128:
+            raise ValueError("Invalid password")
         if not InputSanitizer.validate_sql_safe(v):
             raise ValueError("Invalid password format")
         return v

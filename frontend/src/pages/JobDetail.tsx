@@ -1,5 +1,7 @@
+import { JobApplicationFormTab } from "@/components/JobApplicationFormSection";
 import { CalculateMatchesButton } from "@/components/CalculateMatchesButton";
 import { JobDrawer } from "@/components/JobDrawer";
+import { JobDescriptionHtml } from "@/components/job-form/JobDescriptionHtml";
 import { RankedCandidatesList } from "@/components/RankedCandidatesList";
 import { PipelineBoard } from "@/components/PipelineBoard";
 import { SegmentedTabs } from "@/components/SegmentedTabs";
@@ -23,7 +25,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
-type JobTab = "details" | "matches" | "pipeline" | "applicants" | "statistics";
+type JobTab = "details" | "application-form" | "matches" | "pipeline" | "applicants" | "statistics";
 
 function formatEnumLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -199,6 +201,19 @@ export default function JobDetail() {
     );
   }
 
+  const tabItems = [
+    { value: "details" as const, label: "Details" },
+    { value: "application-form" as const, label: "Application" },
+    {
+      value: "matches" as const,
+      label: "Matching",
+      count: rankedCandidates.length,
+    },
+    { value: "pipeline" as const, label: "Pipeline" },
+    { value: "applicants" as const, label: "Applicants", disabled: true },
+    { value: "statistics" as const, label: "Statistics", disabled: true },
+  ];
+
   if (error || !job) {
     return (
       <div className="p-6">
@@ -232,13 +247,7 @@ export default function JobDetail() {
           variant="minimal"
           value={activeTab}
           onValueChange={setActiveTab}
-          items={[
-            { value: "details", label: "Details" },
-            { value: "matches", label: "Matching", count: rankedCandidates.length },
-            { value: "pipeline", label: "Pipeline" },
-            { value: "applicants", label: "Applicants", disabled: true },
-            { value: "statistics", label: "Statistics", disabled: true },
-          ]}
+          items={tabItems}
         />
       </div>
 
@@ -323,9 +332,7 @@ export default function JobDetail() {
             </CardHeader>
             <Separator />
             <CardContent className="pt-6">
-              <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-                {job.description}
-              </p>
+              <JobDescriptionHtml html={job.description} className="text-foreground/90" />
             </CardContent>
           </Card>
 
@@ -408,6 +415,12 @@ export default function JobDetail() {
         </div>
       )}
 
+      {activeTab === "application-form" && (
+        <div className="min-h-0 flex-1 overflow-auto px-6 pb-8">
+          <JobApplicationFormTab jobId={job.id} />
+        </div>
+      )}
+
       {activeTab === "matches" && (
         <div className="space-y-4 px-6">
           {!(rankedCandidates.length > 0 && !isLoadingMatches) && (
@@ -455,7 +468,7 @@ export default function JobDetail() {
         </div>
       )}
 
-      <JobDrawer open={drawerOpen} onOpenChange={setDrawerOpen} job={job} mode="edit" />
+      <JobDrawer open={drawerOpen} onOpenChange={setDrawerOpen} job={job} />
 
       <Dialog.Root open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
         <Dialog.Portal>

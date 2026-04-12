@@ -10,6 +10,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.core.security import get_db
+from app.core.validation import validate_search_query
 from app.core.email import send_application_confirmation, send_new_application_notification
 from app.db.models.organization import Organization
 from app.db.models.job import Job
@@ -17,8 +18,10 @@ from app.db.models.user import User
 from app.db.models.candidate import Candidate
 from app.db.models.candidate_file import CandidateFile
 from app.db.models.job_application import JobApplication
-from app.db.models.application_form_config import ApplicationFormConfig
-from app.db.models.custom_form_field import CustomFormField
+from app.services.application_form_resolution import (
+    get_org_application_form,
+    resolve_application_form_for_job,
+)
 from app.schemas.public_careers import (
     PublicCareerPageResponse,
     PublicOrganizationResponse,
@@ -29,7 +32,12 @@ from app.schemas.public_careers import (
     PublicFormConfigResponse,
     PublicCustomFieldResponse,
 )
-from app.api.files import get_resume_parser, save_work_experience, calculate_experience_years
+from app.api.files import (
+    get_resume_parser,
+    save_work_experience,
+    calculate_experience_years,
+    validate_uploaded_file_content,
+)
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -42,24 +50,11 @@ ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.doc', '.txt'}
 
 
 def _get_form_config_for_org(org_id: int, db: Session) -> dict:
-    """Get the application form configuration for public display."""
-    config = db.query(ApplicationFormConfig).filter(
-        ApplicationFormConfig.organization_id == org_id
-    ).first()
-
-    custom_fields = (
-        db.query(CustomFormField)
-        .filter(CustomFormField.organization_id == org_id)
-        .order_by(CustomFormField.sort_order)
-        .all()
-    )
-
-    # Return defaults if no config exists
-    config_data = PublicFormConfigResponse.model_validate(config) if config else PublicFormConfigResponse()
-
+    """Org-level application form (career page index / previews)."""
+    cfg, fields = get_org_application_form(org_id, db)
     return {
-        "config": config_data,
-        "custom_fields": [PublicCustomFieldResponse.model_validate(f) for f in custom_fields],
+        "config": cfg.model_dump(),
+        "custom_fields": [PublicCustomFieldResponse.model_validate(f).model_dump() for f in fields],
     }
 
 
@@ -93,7 +88,9 @@ def get_career_page(
     if employment_type:
         query = query.filter(Job.employment_type == employment_type)
     if search:
-        query = query.filter(Job.title.ilike(f"%{search}%"))
+        sanitized_search = validate_search_query(search)
+        if sanitized_search:
+            query = query.filter(Job.title.ilike(f"%{sanitized_search}%"))
 
     jobs = query.order_by(Job.created_at.desc()).all()
 
@@ -145,11 +142,15 @@ def get_career_job_detail(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job.organization = org
-    form_config = _get_form_config_for_org(org.id, db)
+    eff_cfg, eff_fields, uses_org = resolve_application_form_for_job(job.id, org.id, db)
 
     return {
         "job": PublicJobDetail.model_validate(job),
-        "application_form": form_config,
+        "application_form": {
+            "config": eff_cfg.model_dump(),
+            "custom_fields": [PublicCustomFieldResponse.model_validate(f).model_dump() for f in eff_fields],
+            "use_organization_defaults": uses_org,
+        },
     }
 
 
@@ -207,7 +208,6 @@ async def apply_to_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Parse and validate custom fields
     custom_field_responses = None
     if custom_fields:
         try:
@@ -215,49 +215,39 @@ async def apply_to_job(
         except json.JSONDecodeError:
             raise HTTPException(status_code=422, detail="Invalid custom fields format")
 
-        # Validate required custom fields
-        org_custom_fields = (
-            db.query(CustomFormField)
-            .filter(CustomFormField.organization_id == org.id)
-            .all()
-        )
-        for cf in org_custom_fields:
-            if cf.is_required and cf.field_key not in (custom_field_responses or {}):
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Required field '{cf.label}' is missing"
-                )
+    eff_cfg, eff_custom_fields, _ = resolve_application_form_for_job(job.id, org.id, db)
 
-    # Validate required default fields based on form config
-    config = db.query(ApplicationFormConfig).filter(
-        ApplicationFormConfig.organization_id == org.id
-    ).first()
-    if config:
-        if config.show_phone and config.require_phone and not phone:
-            raise HTTPException(status_code=422, detail="Phone is required")
-        if config.show_location and config.require_location and not location:
-            raise HTTPException(status_code=422, detail="Location is required")
-        if config.show_linkedin and config.require_linkedin and not linkedin_url:
-            raise HTTPException(status_code=422, detail="LinkedIn URL is required")
-        if config.show_portfolio and config.require_portfolio and not portfolio_url:
-            raise HTTPException(status_code=422, detail="Portfolio URL is required")
-        if config.show_cover_letter and config.require_cover_letter and not cover_letter:
-            raise HTTPException(status_code=422, detail="Cover letter is required")
+    for cf in eff_custom_fields:
+        if cf.is_required and (not custom_field_responses or cf.field_key not in custom_field_responses):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Required field '{cf.label}' is missing",
+            )
+
+    # Validate required default fields based on effective form config for this job
+    if eff_cfg.show_phone and eff_cfg.require_phone and not phone:
+        raise HTTPException(status_code=422, detail="Phone is required")
+    if eff_cfg.show_location and eff_cfg.require_location and not location:
+        raise HTTPException(status_code=422, detail="Location is required")
+    if eff_cfg.show_linkedin and eff_cfg.require_linkedin and not linkedin_url:
+        raise HTTPException(status_code=422, detail="LinkedIn URL is required")
+    if eff_cfg.show_portfolio and eff_cfg.require_portfolio and not portfolio_url:
+        raise HTTPException(status_code=422, detail="Portfolio URL is required")
+    if eff_cfg.show_cover_letter and eff_cfg.require_cover_letter and not cover_letter:
+        raise HTTPException(status_code=422, detail="Cover letter is required")
 
     # Validate resume file
     if not resume.filename:
         raise HTTPException(status_code=400, detail="No resume file provided")
 
-    file_ext = Path(resume.filename).suffix.lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type {file_ext} not supported. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
-
     file_content = await resume.read()
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="File too large. Maximum size: 10MB")
+    sanitized_filename, file_ext = validate_uploaded_file_content(
+        file_content,
+        resume.filename,
+        allowed_extensions=ALLOWED_EXTENSIONS,
+        max_size=MAX_FILE_SIZE,
+        size_error="File too large. Maximum size: 10MB",
+    )
 
     # Check for existing candidate by email in org -> reuse if found
     candidate = (
@@ -270,7 +260,7 @@ async def apply_to_job(
         # Parse resume and create new candidate
         try:
             parser = get_resume_parser()
-            parsed_data = await parser.parse_resume(file_content, resume.filename)
+            parsed_data = await parser.parse_resume(file_content, sanitized_filename)
 
             personal_info = parsed_data.get("personal_info", {})
             skills_info = parsed_data.get("skills", {})
@@ -335,13 +325,13 @@ async def apply_to_job(
 
     # Save resume file
     file_id = str(uuid.uuid4())
-    file_path = UPLOAD_DIR / f"{file_id}_{resume.filename}"
+    file_path = UPLOAD_DIR / f"{file_id}_{sanitized_filename}"
     async with aiofiles.open(file_path, 'wb') as f:
         await f.write(file_content)
 
     candidate_file = CandidateFile(
         candidate_id=candidate.id,
-        filename=resume.filename,
+        filename=sanitized_filename,
         file_path=str(file_path),
         file_type=file_ext[1:],
         file_size=len(file_content),

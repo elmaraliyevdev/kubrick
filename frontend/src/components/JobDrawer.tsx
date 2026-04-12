@@ -4,16 +4,28 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useCreateJob, useUpdateJob } from "@/hooks/useJobs";
-import type { Job, JobCreate, JobUpdate } from "@/types/job";
-import { Plus, X } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { BulletListEditor } from "@/components/job-form/BulletListEditor";
+import { JobDescriptionEditor } from "@/components/job-form/JobDescriptionEditor";
+import { htmlToPlainText, sanitizeJobDescriptionHtml } from "@/utils/jobDescriptionHtml";
+import { useUpdateJob } from "@/hooks/useJobs";
+import type { Job, JobUpdate } from "@/types/job";
+import { useState } from "react";
 
 interface JobDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  job?: Job | null;
-  mode: "create" | "edit";
+  job: Job | null;
 }
 
 interface FormData {
@@ -28,116 +40,51 @@ interface FormData {
   work_arrangement: string;
   status: string;
   category: string;
+  skills_required: string;
+  experience_level: string;
 }
 
-const EMPTY_FORM: FormData = {
-  title: "",
-  description: "",
-  location: "",
-  employment_type: "full_time",
-  responsibilities: [""],
-  requirements: [""],
-  nice_to_have: [""],
-  benefits: [""],
-  work_arrangement: "onsite",
-  status: "open",
-  category: "",
-};
+function jobToForm(job: Job): FormData {
+  return {
+    title: job.title,
+    description: job.description,
+    location: job.location || "",
+    employment_type: job.employment_type,
+    responsibilities: job.responsibilities?.length ? job.responsibilities : [""],
+    requirements: job.requirements?.length ? job.requirements : [""],
+    nice_to_have: job.nice_to_have?.length ? job.nice_to_have : [""],
+    benefits: job.benefits?.length ? job.benefits : [""],
+    work_arrangement: job.work_arrangement,
+    status: job.status,
+    category: job.category || "",
+    skills_required: job.skills_required || "",
+    experience_level: job.experience_level || "",
+  };
+}
 
-function BulletList({
-  label,
-  items,
-  onChange,
-  placeholder,
+function clean(arr: string[]) {
+  return arr.map((s) => s.trim()).filter(Boolean);
+}
+
+function JobEditForm({
+  job,
+  onClose,
 }: {
-  label: string;
-  items: string[];
-  onChange: (items: string[]) => void;
-  placeholder: string;
+  job: Job;
+  onClose: () => void;
 }) {
-  const addItem = () => onChange([...items, ""]);
-  const removeItem = (index: number) => {
-    if (items.length <= 1) return;
-    onChange(items.filter((_, i) => i !== index));
-  };
-  const updateItem = (index: number, value: string) => {
-    const updated = [...items];
-    updated[index] = value;
-    onChange(updated);
-  };
-
-  return (
-    <div>
-      <label className="block text-sm text-gray-700 mb-1.5">{label}</label>
-      <div className="space-y-2">
-        {items.map((item, index) => (
-          <div key={index} className="flex items-center gap-2">
-            <span className="text-gray-300 text-sm">•</span>
-            <input
-              value={item}
-              onChange={(e) => updateItem(index, e.target.value)}
-              placeholder={placeholder}
-              className="flex-1 border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            {items.length > 1 && (
-              <button
-                type="button"
-                onClick={() => removeItem(index)}
-                className="p-1 text-gray-300 hover:text-gray-500"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={addItem}
-        className="mt-2 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-      >
-        <Plus className="h-3 w-3" />
-        Add item
-      </button>
-    </div>
-  );
-}
-
-export function JobDrawer({ open, onOpenChange, job, mode }: JobDrawerProps) {
-  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
-
-  const createJobMutation = useCreateJob();
+  const [formData, setFormData] = useState<FormData>(() => jobToForm(job));
   const updateJobMutation = useUpdateJob();
-
-  useEffect(() => {
-    if (mode === "edit" && job) {
-      setFormData({
-        title: job.title,
-        description: job.description,
-        location: job.location || "",
-        employment_type: job.employment_type,
-        responsibilities: job.responsibilities?.length ? job.responsibilities : [""],
-        requirements: job.requirements?.length ? job.requirements : [""],
-        nice_to_have: job.nice_to_have?.length ? job.nice_to_have : [""],
-        benefits: job.benefits?.length ? job.benefits : [""],
-        work_arrangement: job.work_arrangement,
-        status: job.status,
-        category: job.category || "",
-      });
-    } else {
-      setFormData(EMPTY_FORM);
-    }
-  }, [mode, job, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.title.trim() || !htmlToPlainText(formData.description)) {
+      return;
+    }
 
-    // Filter out empty bullet items
-    const clean = (arr: string[]) => arr.filter((s) => s.trim());
-
-    const payload: JobCreate = {
-      title: formData.title,
-      description: formData.description,
+    const payload: JobUpdate = {
+      title: formData.title.trim(),
+      description: sanitizeJobDescriptionHtml(formData.description),
       location: formData.location || undefined,
       employment_type: formData.employment_type,
       responsibilities: clean(formData.responsibilities),
@@ -147,226 +94,210 @@ export function JobDrawer({ open, onOpenChange, job, mode }: JobDrawerProps) {
       work_arrangement: formData.work_arrangement,
       status: formData.status,
       category: formData.category || undefined,
+      skills_required: formData.skills_required.trim() || undefined,
+      experience_level: formData.experience_level || null,
     };
 
     try {
-      if (mode === "create") {
-        await createJobMutation.mutateAsync(payload);
-      } else if (mode === "edit" && job) {
-        await updateJobMutation.mutateAsync({
-          id: job.id,
-          data: payload as JobUpdate,
-        });
-      }
-      onOpenChange(false);
+      await updateJobMutation.mutateAsync({ id: job.id, data: payload });
+      onClose();
     } catch (error) {
       console.error("Error saving job:", error);
     }
   };
 
-  const isLoading = createJobMutation.isPending || updateJobMutation.isPending;
+  const isLoading = updateJobMutation.isPending;
 
+  return (
+    <form onSubmit={handleSubmit}>
+      <SheetHeader>
+        <SheetTitle className="text-lg font-medium text-foreground">Edit job</SheetTitle>
+      </SheetHeader>
+
+      <div className="space-y-5 py-6">
+        <div className="space-y-2">
+          <Label htmlFor="drawer-title">Job title *</Label>
+          <Input
+            id="drawer-title"
+            value={formData.title}
+            onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
+            placeholder="Senior Software Engineer"
+            required
+            className="h-9"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-desc">Description *</Label>
+          <JobDescriptionEditor
+            id="drawer-desc"
+            key={job.id}
+            defaultContent={formData.description}
+            onChange={(html) => setFormData((p) => ({ ...p, description: html }))}
+            placeholder="Brief overview of the role…"
+          />
+        </div>
+
+        <BulletListEditor
+          id="drawer-resp"
+          label="Responsibilities"
+          items={formData.responsibilities}
+          onChange={(items) => setFormData((p) => ({ ...p, responsibilities: items }))}
+          placeholder="e.g. Design and build APIs"
+        />
+
+        <BulletListEditor
+          id="drawer-req"
+          label="Requirements"
+          items={formData.requirements}
+          onChange={(items) => setFormData((p) => ({ ...p, requirements: items }))}
+          placeholder="e.g. 3+ years of experience with Python"
+        />
+
+        <BulletListEditor
+          id="drawer-nice"
+          label="Nice to have"
+          items={formData.nice_to_have}
+          onChange={(items) => setFormData((p) => ({ ...p, nice_to_have: items }))}
+          placeholder="e.g. Experience with Kubernetes"
+        />
+
+        <BulletListEditor
+          id="drawer-ben"
+          label="Benefits"
+          items={formData.benefits}
+          onChange={(items) => setFormData((p) => ({ ...p, benefits: items }))}
+          placeholder="e.g. Health insurance, stock options"
+        />
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-skills">Skills summary (optional)</Label>
+          <Textarea
+            id="drawer-skills"
+            value={formData.skills_required}
+            onChange={(e) => setFormData((p) => ({ ...p, skills_required: e.target.value }))}
+            placeholder="Comma or line-separated skills for matching"
+            className="min-h-[72px] resize-y text-sm"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-exp">Experience level</Label>
+          <Select
+            value={formData.experience_level || "none"}
+            onValueChange={(v) =>
+              setFormData((p) => ({ ...p, experience_level: v === "none" ? "" : v }))
+            }
+          >
+            <SelectTrigger id="drawer-exp" className="h-9">
+              <SelectValue placeholder="Not specified" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Not specified</SelectItem>
+              <SelectItem value="junior">Junior</SelectItem>
+              <SelectItem value="mid">Mid</SelectItem>
+              <SelectItem value="senior">Senior</SelectItem>
+              <SelectItem value="lead">Lead</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-loc">Location</Label>
+          <Input
+            id="drawer-loc"
+            value={formData.location}
+            onChange={(e) => setFormData((p) => ({ ...p, location: e.target.value }))}
+            placeholder="San Francisco, CA"
+            className="h-9"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-cat">Category</Label>
+          <Input
+            id="drawer-cat"
+            value={formData.category}
+            onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
+            placeholder="e.g. Engineering, Marketing"
+            className="h-9"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="drawer-et">Employment type</Label>
+            <Select
+              value={formData.employment_type}
+              onValueChange={(v) => setFormData((p) => ({ ...p, employment_type: v }))}
+            >
+              <SelectTrigger id="drawer-et" className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="full_time">Full time</SelectItem>
+                <SelectItem value="part_time">Part time</SelectItem>
+                <SelectItem value="contract">Contract</SelectItem>
+                <SelectItem value="internship">Internship</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="drawer-wa">Work arrangement</Label>
+            <Select
+              value={formData.work_arrangement}
+              onValueChange={(v) => setFormData((p) => ({ ...p, work_arrangement: v }))}
+            >
+              <SelectTrigger id="drawer-wa" className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="remote_only">Remote only</SelectItem>
+                <SelectItem value="remote_possible">Remote possible</SelectItem>
+                <SelectItem value="hybrid">Hybrid</SelectItem>
+                <SelectItem value="onsite">Onsite</SelectItem>
+                <SelectItem value="relocation_required">Relocation required</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-status">Status</Label>
+          <Select
+            value={formData.status}
+            onValueChange={(v) => setFormData((p) => ({ ...p, status: v }))}
+          >
+            <SelectTrigger id="drawer-status" className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 border-t border-border pt-4">
+        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? "Saving…" : "Save changes"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function JobDrawer({ open, onOpenChange, job }: JobDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
-          <SheetHeader>
-            <SheetTitle className="text-lg font-medium text-gray-900">
-              {mode === "create" ? "Create New Job" : "Edit Job"}
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="space-y-5 py-6">
-            {/* Title */}
-            <div>
-              <label className="block text-sm text-gray-700 mb-1.5">
-                Job Title *
-              </label>
-              <input
-                value={formData.title}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, title: e.target.value }))
-                }
-                placeholder="Senior Software Engineer"
-                required
-                className="w-full border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm text-gray-700 mb-1.5">
-                Description *
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, description: e.target.value }))
-                }
-                placeholder="Brief overview of the role..."
-                className="w-full min-h-[100px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
-                required
-              />
-            </div>
-
-            {/* 4 bullet sections */}
-            <BulletList
-              label="Responsibilities"
-              items={formData.responsibilities}
-              onChange={(items) =>
-                setFormData((p) => ({ ...p, responsibilities: items }))
-              }
-              placeholder="e.g. Design and build APIs"
-            />
-
-            <BulletList
-              label="Requirements"
-              items={formData.requirements}
-              onChange={(items) =>
-                setFormData((p) => ({ ...p, requirements: items }))
-              }
-              placeholder="e.g. 3+ years of experience with Python"
-            />
-
-            <BulletList
-              label="Nice to Have"
-              items={formData.nice_to_have}
-              onChange={(items) =>
-                setFormData((p) => ({ ...p, nice_to_have: items }))
-              }
-              placeholder="e.g. Experience with Kubernetes"
-            />
-
-            <BulletList
-              label="Benefits"
-              items={formData.benefits}
-              onChange={(items) =>
-                setFormData((p) => ({ ...p, benefits: items }))
-              }
-              placeholder="e.g. Health insurance, stock options"
-            />
-
-            {/* Location */}
-            <div>
-              <label className="block text-sm text-gray-700 mb-1.5">
-                Location
-              </label>
-              <input
-                value={formData.location}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, location: e.target.value }))
-                }
-                placeholder="San Francisco, CA"
-                className="w-full border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Category */}
-            <div>
-              <label className="block text-sm text-gray-700 mb-1.5">
-                Category
-              </label>
-              <input
-                value={formData.category}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, category: e.target.value }))
-                }
-                placeholder="e.g. Engineering, Marketing"
-                className="w-full border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Dropdowns row */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-700 mb-1.5">
-                  Employment Type
-                </label>
-                <select
-                  value={formData.employment_type}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      employment_type: e.target.value,
-                    }))
-                  }
-                  className="w-full border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                >
-                  <option value="full_time">Full Time</option>
-                  <option value="part_time">Part Time</option>
-                  <option value="contract">Contract</option>
-                  <option value="internship">Internship</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-700 mb-1.5">
-                  Work Arrangement
-                </label>
-                <select
-                  value={formData.work_arrangement}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      work_arrangement: e.target.value,
-                    }))
-                  }
-                  className="w-full border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                >
-                  <option value="remote_only">Remote Only</option>
-                  <option value="remote_possible">Remote Possible</option>
-                  <option value="hybrid">Hybrid</option>
-                  <option value="onsite">Onsite</option>
-                  <option value="relocation_required">
-                    Relocation Required
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label className="block text-sm text-gray-700 mb-1.5">
-                Status
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, status: e.target.value }))
-                }
-                className="w-full border border-gray-200 rounded-lg h-9 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              >
-                <option value="draft">Draft</option>
-                <option value="open">Open</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              disabled={isLoading}
-              className="border border-gray-200 text-gray-700 rounded-lg h-9 px-4 text-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="bg-gray-900 text-white rounded-lg h-9 px-4 text-sm hover:bg-gray-800 disabled:opacity-50"
-            >
-              {isLoading
-                ? mode === "create"
-                  ? "Creating..."
-                  : "Updating..."
-                : mode === "create"
-                  ? "Create Job"
-                  : "Update Job"}
-            </button>
-          </div>
-        </form>
+        {job ? <JobEditForm key={job.id} job={job} onClose={() => onOpenChange(false)} /> : null}
       </SheetContent>
     </Sheet>
   );

@@ -74,5 +74,12 @@ class Job(Base):
     organization = relationship("Organization", back_populates="jobs")
 
     applications = relationship("JobApplication", back_populates="job", cascade="all, delete-orphan")
+    application_form_settings = relationship(
+        "JobApplicationFormSettings",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        uselist=False,
+        passive_deletes=True,
+    )
     job_requirements = relationship("JobRequirement", back_populates="job", cascade="all, delete-orphan", uselist=False)
     candidate_matches = relationship("CandidateJobMatch", back_populates="job", cascade="all, delete-orphan")

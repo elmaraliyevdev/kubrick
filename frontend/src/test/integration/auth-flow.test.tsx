@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { render } from '@/test/utils'
+import { renderWithoutRouter as render } from '@/test/utils'
 import App from '@/App'
 
 describe('Authentication Flow Integration', () => {
   beforeEach(() => {
     localStorage.clear()
     // Start at register page
-    window.history.pushState({}, '', '/register')
+    window.history.pushState({}, '', '/signup')
   })
 
   it('completes full registration and verification flow', async () => {
@@ -16,14 +16,18 @@ describe('Authentication Flow Integration', () => {
     render(<App />)
     
     // Step 1: Registration
-    expect(screen.getByText(/create your account/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument()
     
+    const fullNameInput = screen.getByLabelText(/full name/i)
     const emailInput = screen.getByLabelText(/email/i)
     const passwordInput = screen.getByLabelText(/password/i)
-    const registerButton = screen.getByRole('button', { name: /register/i })
+    const termsCheckbox = screen.getByRole('checkbox', { name: /i agree/i })
+    const registerButton = screen.getByRole('button', { name: /create account/i })
     
+    await user.type(fullNameInput, 'John Doe')
     await user.type(emailInput, 'test@example.com')
     await user.type(passwordInput, 'TestPass123!')
+    await user.click(termsCheckbox)
     await user.click(registerButton)
     
     // Step 2: Should redirect to email verification
@@ -33,10 +37,12 @@ describe('Authentication Flow Integration', () => {
     })
     
     // Step 3: Enter verification code
-    const codeInput = screen.getByLabelText(/verification code/i)
-    const verifyButton = screen.getByRole('button', { name: /verify email/i })
+    const codeInputs = screen.getAllByLabelText(/verification code digit/i)
+    const verifyButton = screen.getByRole('button', { name: /verify/i })
     
-    await user.type(codeInput, '123456')
+    for (const [index, digit] of '123456'.split('').entries()) {
+      await user.type(codeInputs[index], digit)
+    }
     await user.click(verifyButton)
     
     // Step 4: Should redirect to complete profile
@@ -48,7 +54,7 @@ describe('Authentication Flow Integration', () => {
     const firstNameInput = screen.getByLabelText(/first name/i)
     const lastNameInput = screen.getByLabelText(/last name/i)
     const organizationInput = screen.getByLabelText(/organization name/i)
-    const saveButton = screen.getByRole('button', { name: /save & continue/i })
+    const saveButton = screen.getByRole('button', { name: /continue/i })
     
     await user.type(firstNameInput, 'John')
     await user.type(lastNameInput, 'Doe')
@@ -67,11 +73,15 @@ describe('Authentication Flow Integration', () => {
     
     const emailInput = screen.getByLabelText(/email/i)
     const passwordInput = screen.getByLabelText(/password/i)
-    const registerButton = screen.getByRole('button', { name: /register/i })
+    const fullNameInput = screen.getByLabelText(/full name/i)
+    const termsCheckbox = screen.getByRole('checkbox', { name: /i agree/i })
+    const registerButton = screen.getByRole('button', { name: /create account/i })
     
     // Try to register with existing email
+    await user.type(fullNameInput, 'Existing User')
     await user.type(emailInput, 'existing@example.com')
     await user.type(passwordInput, 'TestPass123!')
+    await user.click(termsCheckbox)
     await user.click(registerButton)
     
     // Should show error message
@@ -80,7 +90,7 @@ describe('Authentication Flow Integration', () => {
     })
     
     // Should stay on registration page
-    expect(screen.getByText(/create your account/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument()
   })
 
   it('handles invalid verification code', async () => {
@@ -92,10 +102,12 @@ describe('Authentication Flow Integration', () => {
     
     render(<App />)
     
-    const codeInput = screen.getByLabelText(/verification code/i)
-    const verifyButton = screen.getByRole('button', { name: /verify email/i })
+    const codeInputs = screen.getAllByLabelText(/verification code digit/i)
+    const verifyButton = screen.getByRole('button', { name: /verify/i })
     
-    await user.type(codeInput, 'invalid')
+    for (const [index, digit] of '000000'.split('').entries()) {
+      await user.type(codeInputs[index], digit)
+    }
     await user.click(verifyButton)
     
     await waitFor(() => {
@@ -106,21 +118,14 @@ describe('Authentication Flow Integration', () => {
     expect(screen.getByText(/verify your email/i)).toBeInTheDocument()
   })
 
-  it('allows resending verification code', async () => {
-    const user = userEvent.setup()
-    
+  it('shows resend cooldown after the verification page opens', async () => {
     localStorage.setItem('pendingVerificationEmail', 'test@example.com')
     window.history.pushState({}, '', '/verify-email')
     
     render(<App />)
     
-    const resendButton = screen.getByRole('button', { name: /resend code/i })
-    await user.click(resendButton)
-    
-    // Should show success message
-    await waitFor(() => {
-      expect(screen.getByText(/email sent!/i)).toBeInTheDocument()
-    })
+    const resendButton = screen.getByRole('button', { name: /resend in 30s/i })
+    expect(resendButton).toBeDisabled()
   })
 
   it('protects complete-profile route', async () => {
@@ -146,11 +151,11 @@ describe('Login Flow Integration', () => {
     const user = userEvent.setup()
     render(<App />)
     
-    expect(screen.getByText(/login with password/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
     
     const emailInput = screen.getByLabelText(/email/i)
     const passwordInput = screen.getByLabelText(/password/i)
-    const loginButton = screen.getByRole('button', { name: /login/i })
+    const loginButton = screen.getByRole('button', { name: /sign in/i })
     
     await user.type(emailInput, 'test@example.com')
     await user.type(passwordInput, 'TestPass123')
@@ -168,7 +173,7 @@ describe('Login Flow Integration', () => {
     
     const emailInput = screen.getByLabelText(/email/i)
     const passwordInput = screen.getByLabelText(/password/i)
-    const loginButton = screen.getByRole('button', { name: /login/i })
+    const loginButton = screen.getByRole('button', { name: /sign in/i })
     
     await user.type(emailInput, 'wrong@example.com')
     await user.type(passwordInput, 'wrong')
@@ -179,6 +184,6 @@ describe('Login Flow Integration', () => {
     })
     
     // Should stay on login page
-    expect(screen.getByText(/login with password/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
   })
 })

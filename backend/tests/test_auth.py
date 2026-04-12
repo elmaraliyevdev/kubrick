@@ -14,7 +14,7 @@ class TestRegistration:
         """Test successful user registration."""
         response = client.post(
             "/api/auth/register",
-            json={"email": "test@example.com", "password": "TestPass123"}
+            json={"email": "test@example.com", "password": "TangoRiver47!"}
         )
         
         assert response.status_code == 200
@@ -49,7 +49,7 @@ class TestRegistration:
         
         response = client.post(
             "/api/auth/register",
-            json={"email": "test@example.com", "password": "TestPass123"}
+            json={"email": "test@example.com", "password": "TangoRiver47!"}
         )
         
         assert response.status_code == 400
@@ -432,3 +432,43 @@ class TestPasswordLogin:
         
         assert response.status_code == 401
         assert "Invalid credentials" in response.json()["detail"]
+
+    def test_login_inactive_user_fails(self, client: TestClient, db_session):
+        """Inactive users must not be able to create a new session."""
+        user = User(
+            email="inactive@example.com",
+            hashed_password=hash_password("TestPass123"),
+            email_verified=True,
+            is_active=False,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        response = client.post(
+            "/api/auth/login-password",
+            json={"email": "inactive@example.com", "password": "TestPass123"},
+        )
+
+        assert response.status_code == 401
+        assert "Invalid credentials" in response.json()["detail"]
+
+    def test_inactive_user_token_rejected_by_me(self, client: TestClient, db_session):
+        """Existing access tokens stop working once a user is deactivated."""
+        user = User(
+            email="inactive-token@example.com",
+            hashed_password=hash_password("TestPass123"),
+            email_verified=True,
+            is_active=False,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        from app.core.security import create_access_token
+        token = create_access_token(data={"sub": user.email})
+
+        response = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 401
