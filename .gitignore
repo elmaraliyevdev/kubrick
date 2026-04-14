@@ -91,7 +91,6 @@ alembic/versions/__pycache__/
 
 # ===== Sentry =====
 .sentryclirc
-kubrick-key-main.pem
 .claude/
 test-resumes/
 landing/
