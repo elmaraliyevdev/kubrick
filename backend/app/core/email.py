@@ -1,6 +1,7 @@
 import httpx
 import os
 import logging
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +14,28 @@ if not EMAIL_ENABLED:
     print("⚠️  WARNING: Resend email service not configured. Emails will be mocked (printed to console).")
 
 
-async def send_email(to_email: str, subject: str, html: str):
+async def send_email(
+    to_email: str,
+    subject: str,
+    html: str,
+    *,
+    tags: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
     """Send an email via Resend API."""
     if not EMAIL_ENABLED:
         print(f"📧 MOCK EMAIL to {to_email}")
         print(f"   Subject: {subject}")
         print(f"   Body: {html}")
         return {"id": "mock-message-id"}
+
+    payload: Dict[str, Any] = {
+        "from": FROM_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+    }
+    if tags:
+        payload["tags"] = tags
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -28,12 +44,7 @@ async def send_email(to_email: str, subject: str, html: str):
                 "Authorization": f"Bearer {RESEND_API_KEY}",
                 "Content-Type": "application/json",
             },
-            json={
-                "from": FROM_EMAIL,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-            },
+            json=payload,
         )
         if response.status_code >= 400:
             logger.error(f"Resend error: {response.text}")

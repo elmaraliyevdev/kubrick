@@ -11,11 +11,12 @@ from app.db.models.candidate import Candidate
 from app.db.models.job import Job
 from app.db.models.job_application import JobApplication
 from app.db.models.user import User
+from app.constants.pipeline import PIPELINE_STAGES as _PIPELINE_STAGES
 
 router = APIRouter(tags=["pipeline"])
 
 
-PIPELINE_STAGES: List[str] = ["applied", "screening", "interview", "offer", "hired"]
+PIPELINE_STAGES: List[str] = list(_PIPELINE_STAGES)
 
 
 class StageMoveRequest(BaseModel):

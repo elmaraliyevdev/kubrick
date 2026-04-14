@@ -27,6 +27,8 @@ from .refresh_token import RefreshToken
 from .application_form_config import ApplicationFormConfig
 from .custom_form_field import CustomFormField
 from .job_application_form_settings import JobApplicationFormSettings
+from .email_template import EmailTemplate
+from .outbound_email import OutboundEmail
 
 # Make them available for import
 __all__ = [
@@ -47,4 +49,6 @@ __all__ = [
     "ApplicationFormConfig",
     "CustomFormField",
     "JobApplicationFormSettings",
+    "EmailTemplate",
+    "OutboundEmail",
 ]

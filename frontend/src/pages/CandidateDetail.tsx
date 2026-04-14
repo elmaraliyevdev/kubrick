@@ -5,6 +5,8 @@ import { SegmentedTabs } from "@/components/SegmentedTabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PIPELINE_STAGE_LABELS } from "@/constants/pipeline";
+import type { PipelineStage } from "@/constants/pipeline";
 import { useCandidate } from "@/hooks/useCandidates";
 import type { Candidate } from "@/types/candidate";
 import type { BulkUploadResult, UploadResult } from "@/types/upload";
@@ -100,8 +102,10 @@ export default function CandidateDetail() {
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                   {candidate.latest_application_status ? (
-                    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium capitalize text-foreground">
-                      {candidate.latest_application_status}
+                    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                      {candidate.latest_application_status in PIPELINE_STAGE_LABELS
+                        ? PIPELINE_STAGE_LABELS[candidate.latest_application_status as PipelineStage]
+                        : candidate.latest_application_status}
                     </span>
                   ) : null}
                   {candidate.location ? <span>{candidate.location}</span> : null}

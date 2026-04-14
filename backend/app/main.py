@@ -29,6 +29,8 @@ from app.api import (
     dashboard,
     job_applications,
     matching_config,
+    candidate_emails,
+    email_public,
 )
 from app.core.security import REFRESH_COOKIE_PATH
 
@@ -90,6 +92,8 @@ app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(matches.router, prefix="/api/matches", tags=["matches"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(job_applications.router, prefix="/api", tags=["pipeline"])
+app.include_router(candidate_emails.router, prefix="/api")
+app.include_router(email_public.router, prefix="/api")
 app.include_router(application_form.router, prefix="/api/organizations/me/application-form", tags=["application-form"])
 app.include_router(
     matching_config.router,

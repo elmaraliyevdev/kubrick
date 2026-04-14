@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, Enum, Text, ForeignKey, DateTime, func, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
+
+from app.constants.pipeline import PIPELINE_STAGES
 from app.db.session import Base
 
 
@@ -35,7 +37,7 @@ class JobApplication(Base):
 
     # Application status
     status = Column(
-        Enum("applied", "screening", "interview", "offer", "hired", name="application_status"),
+        Enum(*PIPELINE_STAGES, name="application_status"),
         default="applied",
         nullable=False,
         index=True,  # Index for status filtering
@@ -58,3 +60,4 @@ class JobApplication(Base):
     # Relationships
     job = relationship("Job", back_populates="applications")
     candidate = relationship("Candidate", back_populates="job_applications")
+    outbound_emails = relationship("OutboundEmail", back_populates="job_application", cascade="all, delete-orphan")

@@ -45,6 +45,8 @@ export interface DataTableProps<TData, TValue> {
   initialSorting?: SortingState;
   /** Initial column visibility (e.g. hide optional columns by default) */
   initialColumnVisibility?: VisibilityState;
+  /** When false, hides search, extras, and view/column controls above the table */
+  showToolbar?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -58,6 +60,7 @@ export function DataTable<TData, TValue>({
   emptyMessage = "No results.",
   initialSorting = [],
   initialColumnVisibility = {},
+  showToolbar = true,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -91,23 +94,25 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <Input
-            placeholder={searchPlaceholder}
-            value={globalFilter ?? ""}
-            onChange={(event) => setGlobalFilter(String(event.target.value))}
-            className={cn(
-              "box-border h-10 min-h-10 w-full max-w-sm px-3 py-0 text-sm leading-5",
-            )}
-          />
-          {toolbarExtra}
+      {showToolbar ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <Input
+              placeholder={searchPlaceholder}
+              value={globalFilter ?? ""}
+              onChange={(event) => setGlobalFilter(String(event.target.value))}
+              className={cn(
+                "box-border h-10 min-h-10 w-full max-w-sm px-3 py-0 text-sm leading-5",
+              )}
+            />
+            {toolbarExtra}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {toolbarRight}
+            {showViewOptions ? <DataTableViewOptions table={table} /> : null}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {toolbarRight}
-          {showViewOptions ? <DataTableViewOptions table={table} /> : null}
-        </div>
-      </div>
+      ) : null}
       <div className="bg-card overflow-hidden rounded-md border">
         <Table>
           <TableHeader>

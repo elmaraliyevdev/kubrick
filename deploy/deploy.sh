@@ -24,6 +24,8 @@ echo "  Backend dependencies installed, migrations applied"
 # 3. Frontend
 echo "[3/5] Building frontend..."
 cd "$APP_DIR/frontend"
+# Must be set at build time for Vite (override in shell profile or before calling this script).
+export VITE_API_URL="${VITE_API_URL:-https://api.kubrick.app/api}"
 npm ci --silent
 npm run build
 echo "  Frontend built"

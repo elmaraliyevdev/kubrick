@@ -11,10 +11,14 @@ class TestDashboardStats:
         assert response.status_code == 200
         data = response.json()
         assert "open_positions" in data
+        assert "new_applications" in data
         assert "new_applications_7d" in data
+        assert "new_candidates" in data
+        assert "new_jobs" in data
         assert "candidates_to_review" in data
         assert "top_match_score" in data
         assert "trends" in data
+        assert "range" in data
 
     def test_counts_open_positions(self, client, auth_headers, db_session, test_user):
         # Create 2 open jobs and 1 closed

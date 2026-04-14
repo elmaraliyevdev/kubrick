@@ -124,22 +124,29 @@ export const handlers = [
 
   http.get(`${API_BASE}/dashboard/stats`, () => {
     return HttpResponse.json({
-      total_candidates: 0,
-      total_jobs: 0,
-      active_jobs: 0,
-      total_matches: 0,
-      avg_match_score: 0,
+      period: '7d',
+      open_positions: 0,
+      new_applications: 0,
+      new_applications_7d: 0,
+      new_candidates: 0,
+      new_jobs: 0,
+      candidates_to_review: 0,
+      top_match_score: null,
+      trends: { applications: 0 },
+      range: { start: new Date().toISOString(), end: new Date().toISOString() },
     })
   }),
 
+  http.get(`${API_BASE}/dashboard/applications`, () => {
+    return HttpResponse.json([])
+  }),
+
   http.get(`${API_BASE}/candidates/`, () => {
-    return HttpResponse.json({
-      items: [],
-      total: 0,
-      page: 1,
-      limit: 10,
-      pages: 0,
-    })
+    return HttpResponse.json([])
+  }),
+
+  http.get(`${API_BASE}/jobs/`, () => {
+    return HttpResponse.json([])
   }),
 
   // Login endpoint

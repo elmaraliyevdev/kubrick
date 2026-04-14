@@ -1,4 +1,11 @@
-export const PIPELINE_STAGES = ["applied", "screening", "interview", "offer", "hired"] as const;
+export const PIPELINE_STAGES = [
+  "applied",
+  "screening",
+  "interview",
+  "offer",
+  "hired",
+  "rejected",
+] as const;
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
@@ -8,6 +15,7 @@ export const PIPELINE_STAGE_ORDER: Record<PipelineStage, number> = {
   interview: 2,
   offer: 3,
   hired: 4,
+  rejected: 5,
 };
 
 export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
@@ -16,5 +24,6 @@ export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
   interview: "Interview",
   offer: "Offer",
   hired: "Hired",
+  rejected: "Not selected",
 };
 

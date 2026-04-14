@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useDeleteCandidate } from "@/hooks/useCandidates";
 import { cn } from "@/lib/utils";
+import { PIPELINE_STAGE_LABELS } from "@/constants/pipeline";
+import type { PipelineStage } from "@/constants/pipeline";
 import type { CandidateListItem } from "@/types/candidate";
 import type { ColumnDef, FilterFn } from "@tanstack/react-table";
 import { MoreHorizontal, Plus, Upload } from "lucide-react";
@@ -21,6 +23,8 @@ interface CandidatesDataTableProps {
   onCreateCandidate?: () => void;
   onEditCandidate?: (candidate: CandidateListItem) => void;
   onUpload?: () => void;
+  /** Hide search, column view, and primary actions above the table */
+  hideToolbar?: boolean;
 }
 
 function getFullName(candidate: CandidateListItem) {
@@ -52,6 +56,7 @@ export function CandidatesDataTable({
   onCreateCandidate,
   onEditCandidate,
   onUpload,
+  hideToolbar = false,
 }: CandidatesDataTableProps) {
   const deleteCandidateMutation = useDeleteCandidate();
   const navigate = useNavigate();
@@ -133,9 +138,11 @@ export function CandidatesDataTable({
           if (!status) {
             return <span className="text-muted-foreground">—</span>;
           }
+          const label =
+            status in PIPELINE_STAGE_LABELS ? PIPELINE_STAGE_LABELS[status as PipelineStage] : status;
           return (
-            <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs capitalize">
-              {status}
+            <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
+              {label}
             </span>
           );
         },
@@ -221,8 +228,9 @@ export function CandidatesDataTable({
         skills: false,
         latest_application_status: false,
       }}
-      showViewOptions
-      toolbarRight={toolbarRight}
+      showToolbar={!hideToolbar}
+      showViewOptions={!hideToolbar}
+      toolbarRight={hideToolbar ? undefined : toolbarRight}
       emptyMessage={isLoading ? "Loading…" : "No candidates found."}
     />
   );

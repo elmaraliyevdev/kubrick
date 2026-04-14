@@ -1,4 +1,5 @@
 import type { PipelineCard as PipelineCardType, PipelineStage } from "@/types/pipeline";
+import { PIPELINE_STAGE_LABELS } from "@/constants/pipeline";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useState } from "react";
@@ -24,7 +25,7 @@ export function PipelineColumn({ stage, cards, jobId }: PipelineColumnProps) {
   return (
     <div className="flex w-80 shrink-0 flex-col">
       <div className="mb-3 flex shrink-0 items-center justify-between">
-        <h3 className="text-sm font-medium capitalize text-foreground">{stage}</h3>
+        <h3 className="text-sm font-medium text-foreground">{PIPELINE_STAGE_LABELS[stage]}</h3>
         <span className="text-xs text-muted-foreground">{cards.length}</span>
       </div>
 

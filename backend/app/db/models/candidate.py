@@ -58,3 +58,4 @@ class Candidate(Base):
     job_applications = relationship("JobApplication", back_populates="candidate", cascade="all, delete-orphan")
     work_experiences = relationship("WorkExperience", back_populates="candidate", cascade="all, delete-orphan")
     job_matches = relationship("CandidateJobMatch", back_populates="candidate", cascade="all, delete-orphan")
+    outbound_emails = relationship("OutboundEmail", back_populates="candidate")

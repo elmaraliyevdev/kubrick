@@ -1,23 +1,19 @@
-import { JobDrawer } from "@/components/JobDrawer";
+import { JobDrawer, type JobDrawerView } from "@/components/JobDrawer";
 import { JobsDataTable } from "@/components/JobsDataTable";
 import { useJobs } from "@/hooks/useJobs";
 import type { Job } from "@/types/job";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 export default function Jobs() {
-  const navigate = useNavigate();
   const { data: jobs = [], isLoading, error } = useJobs();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [drawerView, setDrawerView] = useState<JobDrawerView | null>(null);
 
   const handleCreateJob = () => {
-    navigate("/jobs/new");
+    setDrawerView({ mode: "create" });
   };
 
   const handleEditJob = (job: Job) => {
-    setSelectedJob(job);
-    setDrawerOpen(true);
+    setDrawerView({ mode: "edit", job });
   };
 
   if (error) {
@@ -43,12 +39,10 @@ export default function Jobs() {
       />
 
       <JobDrawer
-        open={drawerOpen}
+        view={drawerView}
         onOpenChange={(open) => {
-          setDrawerOpen(open);
-          if (!open) setSelectedJob(null);
+          if (!open) setDrawerView(null);
         }}
-        job={selectedJob}
       />
     </div>
   );

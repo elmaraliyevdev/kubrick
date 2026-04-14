@@ -26,3 +26,5 @@ class Organization(Base):
     matching_config = relationship("MatchingAlgorithmConfig", back_populates="organization", cascade="all, delete-orphan", uselist=False)
     application_form_config = relationship("ApplicationFormConfig", back_populates="organization", uselist=False, cascade="all, delete-orphan")
     custom_form_fields = relationship("CustomFormField", back_populates="organization", cascade="all, delete-orphan", order_by="CustomFormField.sort_order")
+    email_templates = relationship("EmailTemplate", back_populates="organization", cascade="all, delete-orphan")
+    outbound_emails = relationship("OutboundEmail", back_populates="organization")

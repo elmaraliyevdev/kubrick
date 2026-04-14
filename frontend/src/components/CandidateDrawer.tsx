@@ -81,7 +81,7 @@ export function CandidateDrawer({ open, onOpenChange, candidate, mode }: Candida
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent className="data-[side=right]:w-[400px] data-[side=right]:sm:w-[540px] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <SheetHeader>
             <SheetTitle className="text-lg font-medium text-gray-900">

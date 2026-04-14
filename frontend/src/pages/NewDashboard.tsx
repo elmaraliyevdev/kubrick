@@ -1,3 +1,7 @@
+import { DashboardApplicationsTable } from "@/components/dashboard/DashboardApplicationsTable";
+import { CandidatesDataTable } from "@/components/CandidatesDataTable";
+import { JobsDataTable } from "@/components/JobsDataTable";
+import { SegmentedTabs } from "@/components/SegmentedTabs";
 import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,41 +12,95 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { useRecentCandidates } from "@/hooks/useAnalytics";
-import { useQuery } from "@tanstack/react-query";
-import api from "@/utils/api";
+import {
+  useDashboardApplications,
+  useDashboardStats,
+  type DashboardPeriod,
+} from "@/hooks/useDashboard";
+import { useCandidates } from "@/hooks/useCandidates";
+import { useJobs } from "@/hooks/useJobs";
+import { isIsoDateInRange } from "@/utils/dateRangeFilter";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-function useDashboardStats() {
-  return useQuery({
-    queryKey: ["dashboard", "stats"],
-    queryFn: async () => {
-      const res = await api.get("/dashboard/stats");
-      return res.data as {
-        open_positions: number;
-        new_applications_7d: number;
-        candidates_to_review: number;
-        top_match_score: number | null;
-        trends: {
-          applications: number | null;
-        };
-      };
-    },
-    staleTime: 2 * 60 * 1000,
-  });
+const PERIOD_ITEMS: { value: DashboardPeriod; label: string }[] = [
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "month", label: "This month" },
+  { value: "custom", label: "Custom" },
+];
+
+function defaultCustomRange() {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 7);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { data: stats, isLoading } = useDashboardStats();
-  const { data: recentCandidates, isLoading: candidatesLoading } = useRecentCandidates(5);
+  const [period, setPeriod] = useState<DashboardPeriod>("7d");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
-  if (isLoading) {
+  useEffect(() => {
+    if (period === "custom" && (!customStart || !customEnd)) {
+      const d = defaultCustomRange();
+      setCustomStart(d.start);
+      setCustomEnd(d.end);
+    }
+  }, [period, customStart, customEnd]);
+
+  const customParams =
+    period === "custom" && customStart && customEnd
+      ? { start: customStart, end: customEnd }
+      : undefined;
+
+  const rangeQueryEnabled = period !== "custom" || Boolean(customParams);
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(
+    period,
+    customParams,
+    rangeQueryEnabled
+  );
+  const { data: applications = [], isLoading: appsLoading } = useDashboardApplications(
+    period,
+    customParams,
+    rangeQueryEnabled
+  );
+  const { data: jobsData, isLoading: jobsLoading } = useJobs();
+  const { data: candidatesData, isLoading: candidatesLoading } = useCandidates({
+    limit: 1000,
+  });
+  const allJobs = Array.isArray(jobsData) ? jobsData : [];
+  const allCandidates = Array.isArray(candidatesData) ? candidatesData : [];
+
+  const range = stats?.range;
+  const filteredJobs = useMemo(() => {
+    if (!range?.start || !range?.end) return [];
+    return allJobs.filter((j) => isIsoDateInRange(j.created_at, range.start, range.end));
+  }, [allJobs, range]);
+
+  const filteredCandidates = useMemo(() => {
+    if (!range?.start || !range?.end) return [];
+    return allCandidates.filter((c) => isIsoDateInRange(c.created_at, range.start, range.end));
+  }, [allCandidates, range]);
+
+  const appTrend = stats?.trends?.applications ?? 0;
+  const appTrendPositive = appTrend >= 0;
+
+  const tableLoading = statsLoading || jobsLoading || candidatesLoading;
+
+  if (statsLoading && !stats) {
     return (
-      <div className="p-6 space-y-8">
-        <div className="h-6 w-48 rounded bg-muted animate-pulse" />
+      <div className="space-y-8 p-6">
+        <div className="h-6 w-48 animate-pulse rounded bg-muted" />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <div
@@ -55,25 +113,60 @@ export default function Dashboard() {
     );
   }
 
-  const appTrend = stats?.trends?.applications ?? 0;
-  const appTrendPositive = appTrend >= 0;
-
   return (
-    <div className="p-6 space-y-8">
-      {/* Welcome */}
+    <div className="space-y-6 p-4 lg:p-6">
       <div>
         <p className="text-lg font-medium text-foreground">
           Welcome back, {user?.first_name || "User"}
         </p>
-        <p className="text-sm text-muted-foreground mt-1">Here's an overview of your hiring pipeline.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Here&apos;s an overview of your hiring pipeline.
+        </p>
       </div>
 
-      {/* Stat Cards */}
+      {/* Period + optional custom range */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <SegmentedTabs
+          value={period}
+          onValueChange={(v) => setPeriod(v as DashboardPeriod)}
+          items={PERIOD_ITEMS.map((p) => ({ value: p.value, label: p.label }))}
+          className="w-full max-w-xl lg:w-auto"
+        />
+        {period === "custom" ? (
+          <div className="flex flex-wrap items-end gap-3 lg:ml-auto">
+            <div className="space-y-1.5">
+              <Label htmlFor="dash-from" className="text-xs text-muted-foreground">
+                From
+              </Label>
+              <input
+                id="dash-from"
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="dash-to" className="text-xs text-muted-foreground">
+                To
+              </Label>
+              <input
+                id="dash-to"
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Open Positions */}
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>Open Positions</CardDescription>
+            <CardDescription>Open positions</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {stats?.open_positions ?? 0}
             </CardTitle>
@@ -88,12 +181,11 @@ export default function Dashboard() {
           </CardFooter>
         </Card>
 
-        {/* New Applications (7d) */}
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>New Applications</CardDescription>
+            <CardDescription>New applications</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {stats?.new_applications_7d ?? 0}
+              {stats?.new_applications ?? 0}
             </CardTitle>
             <CardAction>
               {appTrend !== 0 && (
@@ -112,7 +204,7 @@ export default function Dashboard() {
           <CardFooter className="flex-col items-start gap-1.5 text-sm">
             {appTrend !== 0 && (
               <div className="line-clamp-1 flex gap-2 font-medium">
-                {appTrendPositive ? "Up" : "Down"} vs previous week
+                {appTrendPositive ? "Up" : "Down"} vs previous period
                 {appTrendPositive ? (
                   <IconTrendingUp className="size-4" />
                 ) : (
@@ -120,34 +212,32 @@ export default function Dashboard() {
                 )}
               </div>
             )}
-            <div className="text-muted-foreground">Last 7 days</div>
+            <div className="text-muted-foreground">In selected date range</div>
           </CardFooter>
         </Card>
 
-        {/* Candidates to Review */}
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>To Review</CardDescription>
+            <CardDescription>New candidates</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {stats?.candidates_to_review ?? 0}
+              {stats?.new_candidates ?? 0}
             </CardTitle>
             <CardAction>
-              {(stats?.candidates_to_review ?? 0) > 0 && (
+              {(stats?.new_candidates ?? 0) > 0 && (
                 <Badge variant="outline" className="text-xs">
-                  Needs attention
+                  Added
                 </Badge>
               )}
             </CardAction>
           </CardHeader>
           <CardFooter className="flex-col items-start gap-1.5 text-sm">
-            <div className="text-muted-foreground">Unreviewed applications waiting</div>
+            <div className="text-muted-foreground">Profiles created in this range</div>
           </CardFooter>
         </Card>
 
-        {/* Top Match Score */}
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>Top Match</CardDescription>
+            <CardDescription>Top match</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {stats?.top_match_score != null ? `${stats.top_match_score}%` : "—"}
             </CardTitle>
@@ -155,7 +245,7 @@ export default function Dashboard() {
               {stats?.top_match_score != null && stats.top_match_score >= 80 && (
                 <Badge variant="outline" className="text-xs">
                   <IconTrendingUp className="size-3.5" />
-                  Excellent
+                  Strong
                 </Badge>
               )}
             </CardAction>
@@ -163,46 +253,43 @@ export default function Dashboard() {
           <CardFooter className="flex-col items-start gap-1.5 text-sm">
             <div className="text-muted-foreground">
               {stats?.top_match_score != null
-                ? "Best candidate-job match score"
+                ? "Best score in your organization"
                 : "Run matching to see scores"}
             </div>
           </CardFooter>
         </Card>
       </div>
 
-      {/* Recent Candidates */}
-      <div>
-        <p className="text-sm font-medium text-foreground mb-4">Recent candidates</p>
-        <div className="rounded-lg bg-card p-6 text-card-foreground ring-1 ring-foreground/10">
-          {candidatesLoading ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : recentCandidates && recentCandidates.length > 0 ? (
-            <div>
-              {recentCandidates.map((candidate, idx) => (
-                <div
-                  key={candidate.id}
-                  onClick={() => navigate(`/candidates/${candidate.id}`)}
-                  className={`flex items-center justify-between py-3 cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded ${
-                    idx < recentCandidates.length - 1 ? "border-b border-border" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-6">
-                    <span className="text-sm text-foreground">
-                      {candidate.first_name} {candidate.last_name}
-                    </span>
-                    <span className="text-sm text-muted-foreground">{candidate.email}</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {new Date(candidate.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No recent candidates</p>
-          )}
-        </div>
-      </div>
+      {/* Table tabs */}
+      <Tabs defaultValue="candidates" className="w-full space-y-4">
+        <TabsList>
+          <TabsTrigger value="candidates">Candidates</TabsTrigger>
+          <TabsTrigger value="jobs">Jobs</TabsTrigger>
+          <TabsTrigger value="applications">Applications</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="candidates" className="mt-0 space-y-4">
+          <CandidatesDataTable
+            data={filteredCandidates}
+            isLoading={tableLoading}
+            hideToolbar
+            onEditCandidate={(c) => navigate(`/candidates/${c.id}`)}
+          />
+        </TabsContent>
+
+        <TabsContent value="jobs" className="mt-0 space-y-4">
+          <JobsDataTable
+            data={filteredJobs}
+            isLoading={tableLoading}
+            hideToolbar
+            onEditJob={(job) => navigate(`/jobs/${job.id}`)}
+          />
+        </TabsContent>
+
+        <TabsContent value="applications" className="mt-0 space-y-4">
+          <DashboardApplicationsTable data={applications} isLoading={appsLoading || statsLoading} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

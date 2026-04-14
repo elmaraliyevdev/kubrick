@@ -1,8 +1,12 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMemo } from "react";
+import { Mail } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { PipelineCard as PipelineCardType, PipelineStage } from "@/types/pipeline";
+import { PIPELINE_STAGE_LABELS } from "@/constants/pipeline";
+import { SendCandidateEmailDialog } from "@/components/SendCandidateEmailDialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 function PipelineCardInner({ card, stage }: { card: PipelineCardType; stage: PipelineStage }) {
@@ -20,7 +24,7 @@ function PipelineCardInner({ card, stage }: { card: PipelineCardType; stage: Pip
           </div>
           <div className="text-xs text-gray-500">Match: {card.match_score ?? "N/A"}</div>
         </div>
-        <div className="whitespace-nowrap text-[10px] text-gray-500">{stage}</div>
+        <div className="whitespace-nowrap text-[10px] text-gray-500">{PIPELINE_STAGE_LABELS[stage]}</div>
       </div>
 
       {(matchedPreview.length > 0 || missingPreview.length > 0) && (
@@ -72,6 +76,7 @@ interface PipelineCardProps {
 
 export function PipelineCard({ card, stage }: PipelineCardProps) {
   const navigate = useNavigate();
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: String(card.application_id),
@@ -86,20 +91,53 @@ export function PipelineCard({ card, stage }: PipelineCardProps) {
     };
   }, [transform, transition, isDragging]);
 
+  const candidateLabel =
+    card.candidate?.name ||
+    `${card.candidate?.first_name ?? ""} ${card.candidate?.last_name ?? ""}`.trim() ||
+    "Candidate";
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="cursor-grab rounded-md border border-border bg-white p-3 shadow-none active:cursor-grabbing"
-      {...attributes}
-      {...listeners}
-      onClick={() => {
-        if (card.candidate?.id) navigate(`/candidates/${card.candidate.id}`);
-      }}
-      role="button"
-      tabIndex={0}
-    >
-      <PipelineCardInner card={card} stage={stage} />
-    </div>
+    <>
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="cursor-grab rounded-md border border-border bg-white p-3 shadow-none active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <div
+          onClick={() => {
+            if (card.candidate?.id) navigate(`/candidates/${card.candidate.id}`);
+          }}
+          role="button"
+          tabIndex={0}
+        >
+          <PipelineCardInner card={card} stage={stage} />
+        </div>
+        <div className="mt-2 flex justify-end border-t border-border pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-7 gap-1 text-muted-foreground"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEmailOpen(true);
+            }}
+          >
+            <Mail className="size-3.5" aria-hidden />
+            Email
+          </Button>
+        </div>
+      </div>
+      <SendCandidateEmailDialog
+        open={emailOpen}
+        onOpenChange={setEmailOpen}
+        applicationId={card.application_id}
+        preferredStage={stage}
+        candidateLabel={candidateLabel}
+      />
+    </>
   );
 }

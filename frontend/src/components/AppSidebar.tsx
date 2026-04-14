@@ -49,6 +49,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           { title: "Profile", url: "/settings/profile" },
           { title: "Organization", url: "/settings/organization" },
           { title: "Career Page", url: "/settings/career-page" },
+          { title: "Email", url: "/settings/email" },
           ...(user?.role === "admin"
             ? [{ title: "Matching", url: "/settings/matching" }]
             : []),

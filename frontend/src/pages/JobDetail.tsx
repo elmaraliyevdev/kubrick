@@ -1,6 +1,6 @@
 import { JobApplicationFormTab } from "@/components/JobApplicationFormSection";
 import { CalculateMatchesButton } from "@/components/CalculateMatchesButton";
-import { JobDrawer } from "@/components/JobDrawer";
+import { JobDrawer, type JobDrawerView } from "@/components/JobDrawer";
 import { JobDescriptionHtml } from "@/components/job-form/JobDescriptionHtml";
 import { RankedCandidatesList } from "@/components/RankedCandidatesList";
 import { PipelineBoard } from "@/components/PipelineBoard";
@@ -105,7 +105,7 @@ export default function JobDetail() {
   const [rankedCandidates, setRankedCandidates] = useState<CandidateMatch[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [activeTab, setActiveTab] = useState<JobTab>("details");
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerView, setDrawerView] = useState<JobDrawerView | null>(null);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [primarySkills, setPrimarySkills] = useState<string[]>([]);
   const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
@@ -280,7 +280,12 @@ export default function JobDetail() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2 sm:pt-1">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setDrawerOpen(true)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => job && setDrawerView({ mode: "edit", job })}
+                  >
                     Edit job
                   </Button>
                   <Button
@@ -468,7 +473,12 @@ export default function JobDetail() {
         </div>
       )}
 
-      <JobDrawer open={drawerOpen} onOpenChange={setDrawerOpen} job={job} />
+      <JobDrawer
+        view={drawerView}
+        onOpenChange={(open) => {
+          if (!open) setDrawerView(null);
+        }}
+      />
 
       <Dialog.Root open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
         <Dialog.Portal>

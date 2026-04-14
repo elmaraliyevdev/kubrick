@@ -5,7 +5,6 @@ import CandidateDetail from "@/pages/CandidateDetail";
 import Candidates from "@/pages/Candidates";
 import CompleteProfile from "@/pages/CompleteProfile";
 import ForgotPassword from "@/pages/ForgotPassword";
-import CreateJob from "@/pages/CreateJob";
 import JobDetail from "@/pages/JobDetail";
 import Jobs from "@/pages/Jobs";
 import Login from "@/pages/Login";
@@ -21,6 +20,7 @@ import SettingsOrganization from "@/pages/settings/SettingsOrganization";
 import SettingsProfile from "@/pages/settings/SettingsProfile";
 import SettingsCareerPage from "@/pages/settings/SettingsCareerPage";
 import SettingsMatching from "@/pages/settings/SettingsMatching";
+import SettingsEmail from "@/pages/settings/SettingsEmail";
 import CareerLayout from "@/layouts/CareerLayout";
 import CareerPage from "@/pages/careers/CareerPage";
 import CareerJobDetail from "@/pages/careers/CareerJobDetail";
@@ -66,7 +66,7 @@ export default function MainApp() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="jobs" element={<Jobs />} />
-          <Route path="jobs/new" element={<CreateJob />} />
+          <Route path="jobs/new" element={<Navigate to="/jobs" replace />} />
           <Route path="jobs/:jobId" element={<JobDetail />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="candidates" element={<Candidates />} />
@@ -75,6 +75,7 @@ export default function MainApp() {
           <Route path="settings/profile" element={<SettingsProfile />} />
           <Route path="settings/organization" element={<SettingsOrganization />} />
           <Route path="settings/career-page" element={<SettingsCareerPage />} />
+          <Route path="settings/email" element={<SettingsEmail />} />
           <Route path="settings/matching" element={<SettingsMatching />} />
         </Route>
 

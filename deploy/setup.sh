@@ -31,6 +31,16 @@ else
     echo "  User kubrick already exists"
 fi
 
+# Allow the app user to restart the API during deploy (no TTY for sudo password).
+echo "[2b/7] Sudoers for deployment (systemctl + journalctl)..."
+cat >/etc/sudoers.d/kubrick-deploy <<'EOF'
+kubrick ALL=(ALL) NOPASSWD:/usr/bin/systemctl restart kubrick-api, /usr/bin/systemctl status kubrick-api, /usr/bin/systemctl start kubrick-api, /usr/bin/systemctl stop kubrick-api, /usr/bin/journalctl
+EOF
+chmod 440 /etc/sudoers.d/kubrick-deploy
+if command -v visudo >/dev/null 2>&1; then
+    visudo -c -f /etc/sudoers.d/kubrick-deploy
+fi
+
 # 3. PostgreSQL setup
 echo "[3/7] Setting up PostgreSQL..."
 PG_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")

@@ -12,13 +12,6 @@ export function useBreadcrumbs(): Breadcrumb[] {
   const params = useParams<{ jobId: string; candidateId: string }>();
   const pathname = location.pathname;
 
-  if (pathname === "/jobs/new") {
-    return [
-      { label: "Jobs", href: "/jobs" },
-      { label: "New job" },
-    ];
-  }
-
   const jobId = params.jobId ? parseInt(params.jobId, 10) : 0;
   const candidateId = params.candidateId ? parseInt(params.candidateId) : 0;
 
@@ -51,6 +44,7 @@ export function useBreadcrumbs(): Breadcrumb[] {
       "/settings/profile": "Profile",
       "/settings/organization": "Organization",
       "/settings/career-page": "Career Page",
+      "/settings/email": "Email",
       "/settings/matching": "Matching",
     };
     const subLabel = settingsRoutes[pathname];

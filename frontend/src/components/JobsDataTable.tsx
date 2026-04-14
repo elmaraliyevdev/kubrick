@@ -47,6 +47,8 @@ interface JobsDataTableProps {
   isLoading?: boolean;
   onCreateJob?: () => void;
   onEditJob?: (job: Job) => void;
+  /** Hide filter search, columns menu, and New Job above the table */
+  hideToolbar?: boolean;
 }
 
 export function JobsDataTable({
@@ -54,6 +56,7 @@ export function JobsDataTable({
   isLoading,
   onCreateJob,
   onEditJob,
+  hideToolbar = false,
 }: JobsDataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] =
@@ -201,54 +204,55 @@ export function JobsDataTable({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <Input
-          placeholder="Filter jobs..."
-          value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
-          onChange={(event) =>
-            table.getColumn("title")?.setFilterValue(event.target.value)
-          }
-          className="h-9 w-64"
-        />
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <IconLayoutColumns className="size-4" />
-                Columns
+      {!hideToolbar ? (
+        <div className="flex items-center justify-between">
+          <Input
+            placeholder="Filter jobs..."
+            value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
+            onChange={(event) =>
+              table.getColumn("title")?.setFilterValue(event.target.value)
+            }
+            className="h-9 w-64"
+          />
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <IconLayoutColumns className="size-4" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {table
+                  .getAllColumns()
+                  .filter(
+                    (column) =>
+                      typeof column.accessorFn !== "undefined" &&
+                      column.getCanHide()
+                  )
+                  .map((column) => (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) =>
+                        column.toggleVisibility(!!value)
+                      }
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {onCreateJob && (
+              <Button size="sm" onClick={onCreateJob}>
+                <IconPlus className="size-4" />
+                New Job
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {table
-                .getAllColumns()
-                .filter(
-                  (column) =>
-                    typeof column.accessorFn !== "undefined" &&
-                    column.getCanHide()
-                )
-                .map((column) => (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {onCreateJob && (
-            <Button size="sm" onClick={onCreateJob}>
-              <IconPlus className="size-4" />
-              New Job
-            </Button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Table */}
       <div className="overflow-hidden rounded-lg border border-border">
