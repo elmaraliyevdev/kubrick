@@ -88,6 +88,20 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
+      - name: Validate deploy secrets
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          if [ -z "$EC2_HOST" ]; then
+            echo "Missing required secret: EC2_HOST"
+            exit 1
+          fi
+          if [ -z "$EC2_SSH_KEY" ]; then
+            echo "Missing required secret: EC2_SSH_KEY"
+            exit 1
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -95,7 +109,6 @@ jobs:
           username: kubrick
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 30m
-          script_stop: true
           script: |
             set -euo pipefail
             cd /home/kubrick/kubrick
