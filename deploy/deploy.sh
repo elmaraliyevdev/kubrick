@@ -33,17 +33,29 @@ echo "  Frontend built"
 # 4. Restart backend
 echo "[4/5] Restarting API..."
 sudo systemctl restart kubrick-api
-sleep 2
 
 # 5. Health check
 echo "[5/5] Health check..."
-if curl -sf http://127.0.0.1:8000/health > /dev/null; then
-    echo "  API is healthy"
-else
-    echo "  WARNING: Health check failed!"
-    sudo journalctl -u kubrick-api --no-pager -n 20
-    exit 1
-fi
+# Allow the API process time to fork workers and finish startup hooks.
+HEALTH_URL="http://127.0.0.1:8000/health"
+MAX_ATTEMPTS=30
+SLEEP_SECONDS=2
+
+for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+    if curl -sf "$HEALTH_URL" > /dev/null; then
+        echo "  API is healthy (attempt ${attempt}/${MAX_ATTEMPTS})"
+        break
+    fi
+
+    if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+        echo "  WARNING: Health check failed after ${MAX_ATTEMPTS} attempts."
+        sudo systemctl status kubrick-api --no-pager || true
+        sudo journalctl -u kubrick-api --no-pager -n 50
+        exit 1
+    fi
+
+    sleep "$SLEEP_SECONDS"
+done
 
 echo ""
 echo "=== Deployment complete ==="
