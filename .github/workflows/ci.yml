@@ -83,33 +83,21 @@ jobs:
 
   deploy:
     name: Deploy to EC2
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ec2-deploy]
     needs: [backend, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Validate deploy secrets
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      - name: Deploy on self-hosted EC2 runner
         run: |
-          if [ -z "$EC2_HOST" ]; then
-            echo "Missing required secret: EC2_HOST"
-            exit 1
+          set -euo pipefail
+          cd /home/kubrick/kubrick
+          if [ "$(id -un)" = "kubrick" ]; then
+            git checkout main
+            git pull --ff-only origin main
+            bash /home/kubrick/kubrick/deploy/deploy.sh
+          else
+            sudo -u kubrick git checkout main
+            sudo -u kubrick git pull --ff-only origin main
+            sudo -u kubrick bash /home/kubrick/kubrick/deploy/deploy.sh
           fi
-          if [ -z "$EC2_SSH_KEY" ]; then
-            echo "Missing required secret: EC2_SSH_KEY"
-            exit 1
-          fi
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: kubrick
-          key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 30m
-          script: |
-            set -euo pipefail
-            cd /home/kubrick/kubrick
-            bash deploy/deploy.sh
