@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
+from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -13,6 +14,7 @@ from slowapi.errors import RateLimitExceeded
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.core.logging import setup_logging, get_logger
 from app.middleware.security import SecurityMiddleware, RequestSizeMiddleware
+from app.middleware.observability import ObservabilityMiddleware, build_metrics_response
 
 import app.db.models
 
@@ -55,6 +57,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["127.0.0.1", "::1"])
 
 # Add security middleware
+app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(SecurityMiddleware)
 app.add_middleware(RequestSizeMiddleware, max_size=50 * 1024 * 1024)  # 50MB max
 
@@ -101,6 +104,12 @@ app.include_router(
     tags=["matching-config"],
 )
 app.include_router(public_careers.router, prefix="/api/careers", tags=["public-careers"])
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    """Prometheus metrics endpoint."""
+    return build_metrics_response()
 
 # Serve uploaded files (logos, etc.)
 from pathlib import Path

@@ -202,7 +202,9 @@ Resume text:
         if not hasattr(self, 'api_key') or not self.api_key:
             return None
             
+        import random
         import requests
+        import time
         
         headers = {
             'Authorization': f'Bearer {self.api_key}',
@@ -225,7 +227,7 @@ Resume text:
                     'https://api.openai.com/v1/chat/completions',
                     headers=headers,
                     json=data,
-                    timeout=self.config.timeout
+                    timeout=(10, self.config.timeout),
                 )
                 
                 if response.status_code == 200:
@@ -245,7 +247,8 @@ Resume text:
                     return result
                 else:
                     logger.warning(f"OpenAI API error {response.status_code}: {response.text}")
-                    if attempt == self.config.retry_attempts - 1:
+                    retryable_status = response.status_code in {408, 409, 429, 500, 502, 503, 504}
+                    if not retryable_status or attempt == self.config.retry_attempts - 1:
                         logger.error("Failed to call OpenAI API after all retries")
                         return None
                 
@@ -261,8 +264,9 @@ Resume text:
                     logger.error("Failed to call LLM after all retries")
                     return None
                     
-            import time
-            time.sleep(2 ** attempt)  # Exponential backoff
+            # Jitter prevents synchronized retry spikes across concurrent requests.
+            sleep_seconds = (2 ** attempt) + random.uniform(0, 0.25)
+            time.sleep(sleep_seconds)
                 
         return None
 

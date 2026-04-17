@@ -131,6 +131,37 @@ Health:
 - `GET /health/ready`
 - `GET /health/live`
 
+Tiny health runbook:
+
+- `healthy`: all required dependencies are reachable and system resource usage is within expected limits.
+- `degraded`: API is serving traffic but at least one non-fatal dependency/signal needs attention (for example Redis is configured but unhealthy, or memory/disk pressure is high).
+- `unhealthy`: critical dependency failure (most importantly database connectivity); service should be considered unavailable for normal traffic.
+
+Alert/action guidance:
+
+- Alert on `unhealthy` immediately (page on-call). Action: check DB reachability, credentials, migrations, and API logs.
+- Alert on sustained `degraded` (for example 5-10 minutes). Action: check `checks.redis`, `checks.system`, and capacity headroom.
+- Track `checks.database.response_time_ms` trends. Action: if latency climbs steadily, inspect DB load, pool saturation, and slow queries.
+- For auth/OTP reliability, treat `checks.redis.status = unhealthy` as high-priority when `REDIS_URL` is configured.
+- Keep readiness (`/health/ready`) as deploy gate; do not route traffic until it returns `ready`.
+
+Quick verification commands:
+
+```bash
+# Set API base once
+API_BASE="http://localhost:8000"
+
+# Liveness and readiness
+curl -fsS "$API_BASE/health/live" | jq
+curl -fsS "$API_BASE/health/ready" | jq
+
+# Detailed dependency status (DB/Redis/OpenAI/system)
+curl -fsS "$API_BASE/health/detailed" | jq '.status, .checks'
+
+# Metrics endpoint should return Prometheus text format
+curl -fsS "$API_BASE/metrics" | head -n 20
+```
+
 Auth (`/api/auth`):
 
 - `POST /register`

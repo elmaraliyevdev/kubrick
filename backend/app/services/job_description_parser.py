@@ -5,7 +5,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import Levenshtein
+from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +347,7 @@ class JobDescriptionParser:
             best_ratio = 0.0
             
             for skill2 in skills2:
-                ratio = Levenshtein.ratio(skill1.lower(), skill2.lower())
+                ratio = fuzz.ratio(skill1.lower(), skill2.lower()) / 100.0
                 if ratio > best_ratio:
                     best_ratio = ratio
                     best_match = skill2

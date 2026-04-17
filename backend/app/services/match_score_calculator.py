@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-import Levenshtein
+from rapidfuzz import fuzz
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -176,7 +176,7 @@ class MatchScoreCalculator:
         for job_skill in job_skills_norm:
             if job_skill not in candidate_skills_norm:  # Not a direct match
                 for candidate_skill in candidate_skills_norm:
-                    similarity = Levenshtein.ratio(job_skill, candidate_skill)
+                    similarity = fuzz.ratio(job_skill, candidate_skill) / 100.0
                     if similarity >= threshold:
                         fuzzy_matches += 1
                         break
@@ -237,7 +237,7 @@ class MatchScoreCalculator:
                     break
 
                 # Fuzzy match
-                similarity = Levenshtein.ratio(req_skill_norm, candidate_skill_norm)
+                similarity = fuzz.ratio(req_skill_norm, candidate_skill_norm) / 100.0
                 if similarity >= threshold:
                     matched_skills.append({
                         "job_skill": req_skill,
@@ -305,7 +305,7 @@ class MatchScoreCalculator:
                     break
 
                 # Fuzzy match
-                similarity = Levenshtein.ratio(nice_skill_norm, candidate_skill_norm)
+                similarity = fuzz.ratio(nice_skill_norm, candidate_skill_norm) / 100.0
                 if similarity >= threshold:
                     matched_skills.append({
                         "job_skill": nice_skill,
@@ -771,7 +771,7 @@ class MatchScoreCalculator:
             if not found:
                 # Fuzzy match
                 for cs in candidate_skills_norm:
-                    if Levenshtein.ratio(ps_norm, cs) >= threshold:
+                    if (fuzz.ratio(ps_norm, cs) / 100.0) >= threshold:
                         matched.append(ps)
                         found = True
                         break

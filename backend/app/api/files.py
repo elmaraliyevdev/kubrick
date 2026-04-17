@@ -214,6 +214,7 @@ def get_resume_parser():
                 temperature=float(os.getenv('OPENAI_TEMPERATURE', '0.1')),
                 max_tokens=int(os.getenv('OPENAI_MAX_TOKENS', '2000')),
                 timeout=int(os.getenv('OPENAI_TIMEOUT', '30')),
+                retry_attempts=int(os.getenv('OPENAI_RETRY_ATTEMPTS', '3')),
             )
             resume_parser = LLMResumeParser(config=config)
             logger.info("LLM resume parser initialized")

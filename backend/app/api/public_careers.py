@@ -1,7 +1,8 @@
 import json
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Request, Header
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import uuid
 import aiofiles
@@ -161,6 +162,7 @@ async def apply_to_job(
     org_slug: str,
     job_slug: str,
     background_tasks: BackgroundTasks,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     first_name: str = Form(...),
     last_name: str = Form(...),
     email: str = Form(...),
@@ -323,6 +325,28 @@ async def apply_to_job(
     if existing_app:
         raise HTTPException(status_code=409, detail="You have already applied for this position")
 
+    # Optional idempotency support for safe client retries (network timeouts/retries).
+    # Scope is per job to prevent accidental collisions across different jobs.
+    normalized_idempotency_key: Optional[str] = None
+    if idempotency_key:
+        normalized_idempotency_key = idempotency_key.strip()
+        if len(normalized_idempotency_key) > 128:
+            raise HTTPException(status_code=400, detail="Idempotency-Key is too long (max 128 chars)")
+        if normalized_idempotency_key:
+            replayed_app = (
+                db.query(JobApplication)
+                .filter(
+                    JobApplication.job_id == job.id,
+                    JobApplication.idempotency_key == normalized_idempotency_key,
+                )
+                .first()
+            )
+            if replayed_app:
+                return JobApplicationResponse(
+                    message="Application already submitted",
+                    application_id=replayed_app.id,
+                )
+
     # Save resume file
     file_id = str(uuid.uuid4())
     file_path = UPLOAD_DIR / f"{file_id}_{sanitized_filename}"
@@ -346,9 +370,29 @@ async def apply_to_job(
         status="applied",
         cover_letter=form_data.cover_letter,
         custom_field_responses=custom_field_responses,
+        idempotency_key=normalized_idempotency_key,
     )
     db.add(application)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # If this is a replay race, return the previously accepted application.
+        if normalized_idempotency_key:
+            replayed_app = (
+                db.query(JobApplication)
+                .filter(
+                    JobApplication.job_id == job.id,
+                    JobApplication.idempotency_key == normalized_idempotency_key,
+                )
+                .first()
+            )
+            if replayed_app:
+                return JobApplicationResponse(
+                    message="Application already submitted",
+                    application_id=replayed_app.id,
+                )
+        raise
     db.refresh(application)
 
     # Send emails in the background (after response is sent)

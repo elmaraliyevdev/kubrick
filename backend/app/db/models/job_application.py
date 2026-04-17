@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Enum, Text, ForeignKey, DateTime, func, JSON, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, Enum, Text, ForeignKey, DateTime, func, JSON, UniqueConstraint, Index, String
 from sqlalchemy.orm import relationship
 
 from app.constants.pipeline import PIPELINE_STAGES
@@ -11,6 +11,8 @@ class JobApplication(Base):
     __table_args__ = (
         # Prevent creating multiple applications for the same candidate/job pair.
         UniqueConstraint("candidate_id", "job_id", name="uq_job_applications_candidate_job"),
+        # Idempotency scope per job to make public apply retries safe.
+        UniqueConstraint("job_id", "idempotency_key", name="uq_job_applications_job_idempotency_key"),
         # Speeds up pipeline reads and stage counters.
         Index("ix_job_applications_job_status_updated_at", "job_id", "status", "updated_at"),
     )
@@ -50,6 +52,7 @@ class JobApplication(Base):
     # Application form data
     cover_letter = Column(Text, nullable=True)
     custom_field_responses = Column(JSON, nullable=True)  # {"field_key": "value", ...}
+    idempotency_key = Column(String(128), nullable=True, index=True)
 
     # Recruiter notes for this specific application
     recruiter_notes = Column(Text, nullable=True)
