@@ -95,3 +95,4 @@ alembic/versions/__pycache__/
 test-resumes/
 landing/
 deploy/EC2_COMMANDS.md
+.cursor

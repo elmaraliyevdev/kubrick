@@ -12,6 +12,7 @@ from datetime import datetime
 from app.db.session import engine
 
 from app.core.security import get_db
+from app.core.redis_client import redis_from_env_url
 
 router = APIRouter(tags=["health"])
 
@@ -38,10 +39,8 @@ def _check_redis() -> Dict[str, Any]:
         return {"status": "not_configured"}
 
     try:
-        import redis
-
         started = time.perf_counter()
-        client = redis.Redis.from_url(redis_url, socket_connect_timeout=1, socket_timeout=1)
+        client = redis_from_env_url(redis_url)
         client.ping()
         response_ms = round((time.perf_counter() - started) * 1000, 2)
         return {"status": "healthy", "response_time_ms": response_ms}

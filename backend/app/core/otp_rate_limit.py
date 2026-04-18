@@ -17,6 +17,8 @@ from collections import defaultdict
 from fastapi import HTTPException, Request, status
 from slowapi.util import get_remote_address
 
+from app.core.redis_client import redis_from_env_url
+
 logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 # SHA256 hex key -> list of unix timestamps (seconds)
@@ -42,9 +44,7 @@ def _get_redis_client():
         return None
 
     try:
-        import redis
-
-        client = redis.Redis.from_url(redis_url, socket_connect_timeout=1, socket_timeout=1)
+        client = redis_from_env_url(redis_url)
         client.ping()
         _redis_client = client
         logger.info("OTP rate limiting using Redis shared store")
