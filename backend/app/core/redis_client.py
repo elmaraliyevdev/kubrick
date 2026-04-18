@@ -1,8 +1,11 @@
 """
 Shared Redis client for rate limiting and health checks.
 
-ElastiCache Serverless + TLS (rediss://) needs generous connect/read timeouts;
-1s is often too short for TLS handshake and cold paths.
+ElastiCache Serverless + TLS: use explicit ssl=... connections. Some redis-py
+versions handle `from_url(rediss://...)` + extra kwargs poorly; explicit params
+are more reliable.
+
+Timeouts default to 10s — ElastiCache TLS + cross-AZ latency can exceed 5s.
 """
 
 from __future__ import annotations
@@ -11,18 +14,18 @@ import logging
 import os
 import ssl
 from typing import Any, Optional
+from urllib.parse import unquote, urlparse
 
 logger = logging.getLogger(__name__)
 
-# Tunable via env; defaults suit ElastiCache TLS + network latency
-_DEFAULT_CONNECT_TIMEOUT = 5
-_DEFAULT_SOCKET_TIMEOUT = 5
+_DEFAULT_CONNECT_TIMEOUT = 10
+_DEFAULT_SOCKET_TIMEOUT = 10
 
 
 def redis_from_env_url(url: Optional[str] = None) -> Any:
     """
     Build a redis.Redis client from REDIS_URL (or passed url).
-    Uses ssl_cert_reqs for rediss:// so AWS ElastiCache TLS validates normally.
+    For rediss://, uses explicit ssl=True (ElastiCache in-transit encryption).
     """
     redis_url = (url if url is not None else os.getenv("REDIS_URL", "")).strip()
     if not redis_url:
@@ -32,18 +35,58 @@ def redis_from_env_url(url: Optional[str] = None) -> Any:
 
     connect_timeout = int(os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", str(_DEFAULT_CONNECT_TIMEOUT)))
     socket_timeout = int(os.getenv("REDIS_SOCKET_TIMEOUT", str(_DEFAULT_SOCKET_TIMEOUT)))
+    verify = (os.getenv("REDIS_SSL_VERIFY", "true") or "true").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
-    kwargs: dict = {
+    parsed = urlparse(redis_url)
+    scheme = (parsed.scheme or "").lower()
+
+    common: dict = {
         "socket_connect_timeout": connect_timeout,
         "socket_timeout": socket_timeout,
+        "decode_responses": False,
+        "health_check_interval": 30,
     }
 
-    if redis_url.startswith("rediss://"):
-        verify = (os.getenv("REDIS_SSL_VERIFY", "true") or "true").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        kwargs["ssl_cert_reqs"] = ssl.CERT_REQUIRED if verify else ssl.CERT_NONE
+    db = 0
+    if parsed.path and parsed.path not in ("/", ""):
+        path_part = parsed.path.strip("/").split("/")[0]
+        if path_part.isdigit():
+            db = int(path_part)
 
-    return redis.Redis.from_url(redis_url, **kwargs)
+    if scheme == "rediss":
+        if not parsed.hostname:
+            raise ValueError("rediss:// URL must include a hostname")
+        port = parsed.port or 6379
+        password = unquote(parsed.password) if parsed.password else None
+        username = unquote(parsed.username) if parsed.username else None
+        return redis.Redis(
+            host=parsed.hostname,
+            port=port,
+            db=db,
+            username=username,
+            password=password,
+            ssl=True,
+            ssl_cert_reqs=ssl.CERT_REQUIRED if verify else ssl.CERT_NONE,
+            **common,
+        )
+
+    if scheme == "redis":
+        if not parsed.hostname:
+            raise ValueError("redis:// URL must include a hostname")
+        port = parsed.port or 6379
+        password = unquote(parsed.password) if parsed.password else None
+        username = unquote(parsed.username) if parsed.username else None
+        return redis.Redis(
+            host=parsed.hostname,
+            port=port,
+            db=db,
+            username=username,
+            password=password,
+            **common,
+        )
+
+    return redis.Redis.from_url(redis_url, **common)
